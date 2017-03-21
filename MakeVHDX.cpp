@@ -585,7 +585,7 @@ int __cdecl wmain(int argc, PWSTR argv[])
 			if (!DeviceIoControl(vhdx, FSCTL_DUPLICATE_EXTENTS_TO_FILE, &dup_extent, sizeof dup_extent, nullptr, 0, &dummy, nullptr))
 			{
 				_CrtDbgBreak();
-				return false;
+				die();
 			}
 
 			vhdx_bat[vhdx_bat_index].FileOffsetMB = vhdx_write_offset / 1024 / 1024;
