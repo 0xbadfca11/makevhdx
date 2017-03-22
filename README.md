@@ -12,3 +12,8 @@ This is proof of concept.
 - Block size of VHDX will be 2 MB.
 - VHD should not be sparse file.
 - VHD must not have integrity stream.
+
+### License
+MIT License  
+Except `crc32c.cpp`, `crc32c.h` and `generated-constants.cpp`.
+[These files under the zlib license.](https://crc32c.angeloflogic.com/license/)
