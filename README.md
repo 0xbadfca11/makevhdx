@@ -10,7 +10,7 @@ This is proof of concept.
 - Type of VHDX will be dynamic.
 - Block size of VHD is supported only 2 MB.
 - Block size of VHDX will be 2 MB.
-- VHD should not be sparse file.
+- VHD must not be sparse attributes.
 - VHD must not have integrity stream.
 
 ### License
