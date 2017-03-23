@@ -454,10 +454,10 @@ int __cdecl wmain(int argc, PWSTR argv[])
 	const UINT32 vhd_block_size = byteswap32(vhd_dyn_header.BlockSize);
 	const UINT32 vhd_bitmap_size = CEILING(vhd_block_size, 512 * 8);
 	_RPTN(_CRT_WARN, "CurrentSize == %llu(%.3fGB)\n", byteswap64(vhd_footer.CurrentSize), byteswap64(vhd_footer.CurrentSize) / (1024.f * 1024.f * 1024.f));
-	_RPTN(_CRT_WARN, "BlockSize == %luKB\n", vhd_block_size / 1024);
+	_RPTN(_CRT_WARN, "BlockSize == %uKB\n", vhd_block_size / 1024);
 	UINT64 using_blocks_count = 0;
 	const UINT32 max_table_entries = byteswap32(vhd_dyn_header.MaxTableEntries);
-	_RPTN(_CRT_WARN, "MaxTableEntries == %lu\n", max_table_entries);
+	_RPTN(_CRT_WARN, "MaxTableEntries == %u\n", max_table_entries);
 	auto block_alloc_table = std::make_unique<VHD_BAT_ENTRY[]>(max_table_entries);
 	ReadFileWithOffset(vhd, block_alloc_table.get(), max_table_entries * sizeof(VHD_BAT_ENTRY), byteswap64(vhd_dyn_header.TableOffset));
 	for (UINT32 i = 0; i < max_table_entries; i++)
@@ -531,14 +531,14 @@ int __cdecl wmain(int argc, PWSTR argv[])
 	};
 
 	const UINT32 chuck_ratio = static_cast<UINT32>((1ULL << 23) * vhdx_metadata_packed.LogicalSectorSize / vhdx_metadata_packed.VhdxFileParameters.BlockSize);
-	_RPTN(_CRT_WARN, "Chuck Ratio == %lu\n", chuck_ratio);
+	_RPTN(_CRT_WARN, "Chuck Ratio == %u\n", chuck_ratio);
 	const UINT32 data_blocks_count = static_cast<UINT32>(CEILING(vhdx_metadata_packed.VirtualDiskSize, vhdx_metadata_packed.VhdxFileParameters.BlockSize));
-	_RPTN(_CRT_WARN, "DataBlocksCount == %lu\n", data_blocks_count);
+	_RPTN(_CRT_WARN, "DataBlocksCount == %u\n", data_blocks_count);
 	_ASSERT(data_blocks_count == max_table_entries);
 	const UINT32 bitmap_blocks_count = CEILING(data_blocks_count, chuck_ratio);
-	_RPTN(_CRT_WARN, "BitmapBlocksCount == %lu\n", bitmap_blocks_count);
+	_RPTN(_CRT_WARN, "BitmapBlocksCount == %u\n", bitmap_blocks_count);
 	const UINT32 total_bat_entries = data_blocks_count + FLOOR(data_blocks_count - 1, chuck_ratio);
-	_RPTN(_CRT_WARN, "TotalBATEntries == %lu\n", total_bat_entries);
+	_RPTN(_CRT_WARN, "TotalBATEntries == %u\n", total_bat_entries);
 
 	const UINT32 vhdx_bat_length = ROUNDUP(total_bat_entries * static_cast<UINT32>(sizeof(VHDX_BAT_ENTRY)), 1024 * 1024);
 	VHDX_REGION_TABLE_HEADER vhdx_region_table_header = { VHDX_REGION_HEADER_SIGNATURE };
