@@ -535,8 +535,6 @@ int __cdecl wmain(int argc, PWSTR argv[])
 	const UINT32 data_blocks_count = static_cast<UINT32>(CEILING(vhdx_metadata_packed.VirtualDiskSize, vhdx_metadata_packed.VhdxFileParameters.BlockSize));
 	_RPTN(_CRT_WARN, "DataBlocksCount == %u\n", data_blocks_count);
 	_ASSERT(data_blocks_count == max_table_entries);
-	const UINT32 bitmap_blocks_count = CEILING(data_blocks_count, chuck_ratio);
-	_RPTN(_CRT_WARN, "BitmapBlocksCount == %u\n", bitmap_blocks_count);
 	const UINT32 total_bat_entries = data_blocks_count + FLOOR(data_blocks_count - 1, chuck_ratio);
 	_RPTN(_CRT_WARN, "TotalBATEntries == %u\n", total_bat_entries);
 
