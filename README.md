@@ -10,7 +10,8 @@ This is proof of concept.
 - Type of VHDX will be dynamic.
 - Block size of VHD is supported only 2 MB.
 - Block size of VHDX will be 2 MB.
-- VHD must not be sparse attributes.
+- ~~VHD must not be sparse attributes.~~  
+  VHD parser of Windows 10 v1703 allow VHD that is sparse file on ReFS v2.
 - VHD must not have integrity stream.
 
 ### License

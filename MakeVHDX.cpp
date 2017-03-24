@@ -369,11 +369,6 @@ int __cdecl wmain(int argc, PWSTR argv[])
 		fputs("Source VHD file has integrity stream.\n", stderr);
 		return EXIT_FAILURE;
 	}
-	if (file_info.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)
-	{
-		fputs("Source VHD file is sparse.\n", stderr);
-		return EXIT_FAILURE;
-	}
 	ULONG dummy;
 	FSCTL_GET_INTEGRITY_INFORMATION_BUFFER get_integrity;
 	if (!DeviceIoControl(vhd, FSCTL_GET_INTEGRITY_INFORMATION, nullptr, 0, &get_integrity, sizeof get_integrity, &dummy, nullptr))
@@ -403,6 +398,13 @@ int __cdecl wmain(int argc, PWSTR argv[])
 	if (!DeviceIoControl(vhdx, FSCTL_SET_INTEGRITY_INFORMATION, &set_integrity, sizeof set_integrity, nullptr, 0, nullptr, nullptr))
 	{
 		die();
+	}
+	if (file_info.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)
+	{
+		if (!DeviceIoControl(vhdx, FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &dummy, nullptr))
+		{
+			die();
+		}
 	}
 
 	VHD_FOOTER vhd_footer;
