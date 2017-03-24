@@ -12,7 +12,8 @@ This is proof of concept.
 - Block size of VHDX will be 2 MB.
 - ~~VHD must not be sparse attributes.~~  
   VHD parser of Windows 10 v1703 allow VHD that is sparse file on ReFS v2.
-- VHD must not have integrity stream.
+- ~~VHD must not have integrity stream.~~  
+  VHD parser of Windows 10 and Windows Server 2016 allow VHD that have integrity stream.
 
 ### License
 MIT License  

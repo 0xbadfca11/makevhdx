@@ -364,11 +364,6 @@ int __cdecl wmain(int argc, PWSTR argv[])
 	}
 	BY_HANDLE_FILE_INFORMATION file_info;
 	ATLENSURE(GetFileInformationByHandle(vhd, &file_info));
-	if (file_info.dwFileAttributes & FILE_ATTRIBUTE_INTEGRITY_STREAM)
-	{
-		fputs("Source VHD file has integrity stream.\n", stderr);
-		return EXIT_FAILURE;
-	}
 	ULONG dummy;
 	FSCTL_GET_INTEGRITY_INFORMATION_BUFFER get_integrity;
 	if (!DeviceIoControl(vhd, FSCTL_GET_INTEGRITY_INFORMATION, nullptr, 0, &get_integrity, sizeof get_integrity, &dummy, nullptr))
@@ -394,7 +389,7 @@ int __cdecl wmain(int argc, PWSTR argv[])
 	}
 	FILE_DISPOSITION_INFO dispos = { TRUE };
 	SetFileInformationByHandle(vhdx, FileDispositionInfo, &dispos, sizeof dispos);
-	FSCTL_SET_INTEGRITY_INFORMATION_BUFFER set_integrity = { CHECKSUM_TYPE_NONE };
+	FSCTL_SET_INTEGRITY_INFORMATION_BUFFER set_integrity = { get_integrity.ChecksumAlgorithm, 0, get_integrity.Flags };
 	if (!DeviceIoControl(vhdx, FSCTL_SET_INTEGRITY_INFORMATION, &set_integrity, sizeof set_integrity, nullptr, 0, nullptr, nullptr))
 	{
 		die();
