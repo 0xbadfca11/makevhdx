@@ -599,13 +599,13 @@ public:
 			WriteFileWithOffset(image, vhd_footer, vhd_next_free_address);
 
 			_ASSERT(IsAligned());
-			auto vhd_bitmap_buffer = std::make_unique<BYTE[]>(vhd_bitmap_size);
-			memset(vhd_bitmap_buffer.get(), 0xFF, vhd_bitmap_size);
+			auto vhd_bitmap_buffer = std::make_unique<BYTE[]>(vhd_bitmap_aligned_size);
+			memset(vhd_bitmap_buffer.get() + vhd_bitmap_padding_size, 0xFF, vhd_bitmap_size);
 			for (UINT32 i = 0; i < vhd_table_entries_count; i++)
 			{
 				if (vhd_block_allocation_table[i] != VHD_UNUSED_BAT_ENTRY)
 				{
-					WriteFileWithOffset(image, vhd_bitmap_buffer.get(), vhd_bitmap_size, 1ULL * vhd_block_allocation_table[i] * VHD_SECTOR_SIZE);
+					WriteFileWithOffset(image, vhd_bitmap_buffer.get(), vhd_bitmap_aligned_size, 1ULL * vhd_block_allocation_table[i] * VHD_SECTOR_SIZE - vhd_bitmap_padding_size);
 				}
 			}
 			return;
