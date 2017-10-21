@@ -1,19 +1,18 @@
 # MakeVHDX
-Create a VHDX using [block cloning](https://technet.microsoft.com/en-us/windows-server-docs/storage/refs/block-cloning) to share used data blocks with VHD.
+Converting a VHD/VHDX to VHD/VHDX using [block cloning](https://technet.microsoft.com/en-us/windows-server-docs/storage/refs/block-cloning) to share used data blocks.
 This is proof of concept.
 
 ## Requirements and Limitations
-- Source VHD and destination VHDX must have placed on same ReFS v2 volume.
+- Source and destination must have placed on same ReFS v2 volume.
+### Convertion from VHD
 - [VHD must be aligned to 4 KB.](https://msdn.microsoft.com/en-us/library/windows/hardware/dn567657.aspx#VHD_FORMAT)
 - [ReFS must be formatted with 4 KB cluster size.](https://blogs.technet.microsoft.com/filecab/2017/01/13/cluster-size-recommendations-for-refs-and-ntfs/)
-- Only dynamic VHD is supported.
-- Type of VHDX will be dynamic.
-- Block size of VHD is supported only 2 MB.
-- Block size of VHDX will be 2 MB.
-- ~~VHD must not be sparse attributes.~~  
-  VHD parser of Windows 10 v1703 allow VHD that is sparse file on ReFS v2.
-- ~~VHD must not have integrity stream.~~  
-  VHD parser of Windows 10 and Windows Server 2016 allow VHD that have integrity stream.
+### Convertion to VHD
+- When cluster size is 64 KB, alignment will be 64 KB. Will break alignment when update with any VHD parser.
+- Block size less than 1 MB can not be specified.
+- Block size other than 2 MB can be specified, but only 2 MB can be used by Microsoft VHD parser.
+### Convertion from Fixed type to Dynamic type
+- Output image will be large. This tool does not inspect file system free space in image, and zero-ed data block.
 
 ### License
 MIT License  
