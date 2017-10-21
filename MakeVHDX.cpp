@@ -399,7 +399,6 @@ private:
 	UINT32 vhd_bitmap_aligned_size;
 	UINT32 vhd_bitmap_padding_size;
 	UINT32 vhd_table_entries_count;
-	UINT32 vhd_table_write_address;
 	UINT32 vhd_table_write_size;
 public:
 	VHD(HANDLE image, UINT32 require_alignment) : image(image), require_alignment(require_alignment)
@@ -552,10 +551,10 @@ public:
 			vhd_bitmap_aligned_size = ROUNDUP(vhd_bitmap_size, require_alignment);
 			vhd_bitmap_padding_size = vhd_bitmap_aligned_size - vhd_bitmap_size;
 			vhd_table_entries_count = static_cast<UINT32>(CEILING(disk_size, block_size));
-			vhd_table_write_address = sizeof vhd_footer + sizeof vhd_dyn_header;
+			const UINT32 vhd_table_write_address = sizeof vhd_footer + sizeof vhd_dyn_header;
 			vhd_table_write_size = ROUNDUP(vhd_table_entries_count * static_cast<UINT32>(sizeof(VHD_BAT_ENTRY)), require_alignment);
 			vhd_block_allocation_table = std::make_unique<VHD_BAT_ENTRY[]>(vhd_table_write_size / sizeof(VHD_BAT_ENTRY));
-			vhd_next_free_address = ROUNDUP(vhd_table_write_address + vhd_table_write_size, require_alignment);
+			vhd_next_free_address = ROUNDUP(sizeof vhd_footer + sizeof vhd_dyn_header + vhd_table_write_size, require_alignment);
 			vhd_footer =
 			{
 				VHD_COOKIE,
@@ -596,7 +595,7 @@ public:
 		{
 			WriteFileWithOffset(image, vhd_footer, 0);
 			WriteFileWithOffset(image, vhd_dyn_header, sizeof vhd_footer);
-			WriteFileWithOffset(image, vhd_block_allocation_table.get(), vhd_table_write_size, vhd_table_write_address);
+			WriteFileWithOffset(image, vhd_block_allocation_table.get(), vhd_table_write_size, sizeof vhd_footer + sizeof vhd_dyn_header);
 			WriteFileWithOffset(image, vhd_footer, vhd_next_free_address);
 
 			_ASSERT(IsAligned());
