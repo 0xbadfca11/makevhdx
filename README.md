@@ -12,7 +12,7 @@ This is proof of concept.
 - Block size less than 1 MB can not be specified.
 - Block size other than 2 MB can be specified, but only 2 MB can be used by Microsoft VHD parser.
 ### Convertion from Fixed type to Dynamic type
-- Output image will be large. This tool does not inspect file system free space in image, and zero-ed data block.
+- Output image will be large. This tool does not inspect file system free space in image, or zero-ed data block.
 
 ### License
 MIT License  
