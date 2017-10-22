@@ -1,7 +1,20 @@
 # MakeVHDX
 Converting a VHD/VHDX to VHD/VHDX using [block cloning](https://technet.microsoft.com/en-us/windows-server-docs/storage/refs/block-cloning) to share used data blocks.
 This is proof of concept.
+```
+Make VHD/VHDX that shares data blocks with source.
 
+MakeVHDX [-fixed | -dynamic] [-sN] Source [Destination]
+
+Source       Specifies conversion source.
+Destination  Specifies conversion destination.
+             If not specified, use file extension exchanged with ".vhd" and ".vhdx".
+-fixed       Make output image fixed file size type.
+-dynamic     Make output image variable file size type.
+             If neither is specified, will be same type as source.
+-s           Specifies output image block size by 1MB. It must be power of 2.
+             Ignore this indication when output is fixed VHD.
+```
 ## Requirements and Limitations
 - Source and destination must have placed on same ReFS v2 volume.
 ### Convertion from VHD
@@ -14,7 +27,7 @@ This is proof of concept.
 ### Convertion from Fixed type to Dynamic type
 - Output image will be large. This tool does not inspect file system free space in image, or zero-ed data block.
 
-### License
+## License
 MIT License  
 Except `crc32c.cpp`, `crc32c.h` and `generated-constants.cpp`.
 [These files under the zlib license.](https://crc32c.angeloflogic.com/license/)
