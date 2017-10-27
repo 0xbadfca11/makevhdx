@@ -1065,8 +1065,9 @@ public:
 };
 struct Option
 {
-	std::optional<UINT32> block_size;
+	UINT32 block_size = 0;
 	std::optional<bool> is_fixed;
+	bool force_space = false;
 };
 template <typename COPY_FROM, typename COPY_TO>
 void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& options)
@@ -1139,7 +1140,7 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 	{
 		die();
 	}
-	if (file_info.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)
+	if (options.force_space || file_info.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)
 	{
 		if (!DeviceIoControl(dst_file, FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &dummy, nullptr))
 		{
@@ -1147,7 +1148,7 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 		}
 	}
 	COPY_TO dst_img(dst_file, get_integrity.ClusterSizeInBytes);
-	dst_img.ConstructHeader(src_img.GetDiskSize(), options.block_size.value_or(0), src_img.GetSectorSize(), options.is_fixed.value_or(src_img.IsFixed()));
+	dst_img.ConstructHeader(src_img.GetDiskSize(), options.block_size, src_img.GetSectorSize(), options.is_fixed.value_or(src_img.IsFixed()));
 	wprintf(
 		L"Image format:      %hs\n"
 		L"Allocation policy: %hs\n"
@@ -1224,16 +1225,17 @@ void usage()
 	fputws(
 		L"Make VHD/VHDX that shares data blocks with source.\n"
 		L"\n"
-		L"MakeVHDX [-fixed | -dynamic] [-sN] Source [Destination]\n"
+		L"MakeVHDX [-fixed | -dynamic] [-bN] [-sparse] Source [Destination]\n"
 		L"\n"
 		L"Source       Specifies conversion source.\n"
 		L"Destination  Specifies conversion destination.\n"
 		L"             If not specified, use file extension exchanged with \".vhd\" and \".vhdx\".\n"
-		L"-fixed       Make output image fixed file size type.\n"
-		L"-dynamic     Make output image variable file size type.\n"
+		L"-fixed       Make output image is fixed file size type.\n"
+		L"-dynamic     Make output image is variable file size type.\n"
 		L"             If neither is specified, will be same type as source.\n"
-		L"-s           Specifies output image block size by 1MB. It must be power of 2.\n"
-		L"             Ignore this indication when output is fixed VHD.\n",
+		L"-b           Specifies output image block size by 1MB. It must be power of 2.\n"
+		L"             Ignore this indication when output is fixed VHD.\n"
+		L"-sparse      Make output image is sparse file.\n",
 		stderr);
 	ExitProcess(EXIT_FAILURE);
 }
@@ -1271,7 +1273,15 @@ int __cdecl wmain(int argc, PWSTR argv[])
 			}
 			options.is_fixed = false;
 		}
-		else if (_wcsnicmp(argv[i], L"-s", 2) == 0)
+		else if (_wcsicmp(argv[i], L"-sparse") == 0)
+		{
+			if (options.force_space)
+			{
+				usage();
+			}
+			options.force_space = true;
+		}
+		else if (_wcsnicmp(argv[i], L"-b", 2) == 0)
 		{
 			if (options.block_size || wcslen(argv[i]) < 3)
 			{
