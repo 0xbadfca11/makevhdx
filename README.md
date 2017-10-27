@@ -1,19 +1,20 @@
 # MakeVHDX
-Converting a VHD/VHDX to VHD/VHDX using [block cloning](https://technet.microsoft.com/en-us/windows-server-docs/storage/refs/block-cloning) to share used data blocks.
+Converting a VHD/VHDX to VHD/VHDX using [block cloning](https://docs.microsoft.com/windows-server/storage/refs/block-cloning) to share used data blocks.
 This is proof of concept.
 ```
 Make VHD/VHDX that shares data blocks with source.
 
-MakeVHDX [-fixed | -dynamic] [-sN] Source [Destination]
+MakeVHDX [-fixed | -dynamic] [-bN] [-sparse] Source [Destination]
 
 Source       Specifies conversion source.
 Destination  Specifies conversion destination.
              If not specified, use file extension exchanged with ".vhd" and ".vhdx".
--fixed       Make output image fixed file size type.
--dynamic     Make output image variable file size type.
+-fixed       Make output image is fixed file size type.
+-dynamic     Make output image is variable file size type.
              If neither is specified, will be same type as source.
--s           Specifies output image block size by 1MB. It must be power of 2.
+-b           Specifies output image block size by 1MB. It must be power of 2.
              Ignore this indication when output is fixed VHD.
+-sparse      Make output image is sparse file.
 ```
 ## Requirements and Limitations
 - Source and destination must have placed on same ReFS v2 volume.
