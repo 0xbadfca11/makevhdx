@@ -1067,7 +1067,7 @@ struct Option
 {
 	UINT32 block_size = 0;
 	std::optional<bool> is_fixed;
-	bool force_space = false;
+	bool force_sparse = false;
 };
 template <typename COPY_FROM, typename COPY_TO>
 void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& options)
@@ -1140,7 +1140,7 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 	{
 		die();
 	}
-	if (options.force_space || file_info.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)
+	if (options.force_sparse || file_info.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)
 	{
 		if (!DeviceIoControl(dst_file, FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &dummy, nullptr))
 		{
@@ -1275,11 +1275,11 @@ int __cdecl wmain(int argc, PWSTR argv[])
 		}
 		else if (_wcsicmp(argv[i], L"-sparse") == 0)
 		{
-			if (options.force_space)
+			if (options.force_sparse)
 			{
 				usage();
 			}
-			options.force_space = true;
+			options.force_sparse = true;
 		}
 		else if (_wcsnicmp(argv[i], L"-b", 2) == 0)
 		{
