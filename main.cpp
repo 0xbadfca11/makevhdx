@@ -16,7 +16,7 @@
 #include <fcntl.h>
 #include <io.h>
 #include "crc32c.h"
-#include "MakeVHDX.h"
+#include "VHD_VHDX_Image.h"
 #include "ConvertImage.h"
 #pragma comment(lib, "pathcch")
 
@@ -131,11 +131,11 @@ int __cdecl wmain(int argc, PWSTR argv[])
   {
     if (_wcsicmp(PathFindExtensionW(destination), L".vhd") == 0)
     {
-      ConvertImage<VHD, VHD>(source, destination, options);
+      ConvertImage<VHD_Image, VHD_Image>(source, destination, options);
     }
     else if (_wcsicmp(PathFindExtensionW(destination), L".vhdx") == 0)
     {
-      ConvertImage<VHD, VHDX>(source, destination, options);
+      ConvertImage<VHD_Image, VHDX_Image>(source, destination, options);
     }
     else
     {
@@ -146,11 +146,11 @@ int __cdecl wmain(int argc, PWSTR argv[])
   {
     if (_wcsicmp(PathFindExtensionW(destination), L".vhd") == 0)
     {
-      ConvertImage<VHDX, VHD>(source, destination, options);
+      ConvertImage<VHDX_Image, VHD_Image>(source, destination, options);
     }
     else if (_wcsicmp(PathFindExtensionW(destination), L".vhdx") == 0)
     {
-      ConvertImage<VHDX, VHDX>(source, destination, options);
+      ConvertImage<VHDX_Image, VHDX_Image>(source, destination, options);
     }
     else
     {

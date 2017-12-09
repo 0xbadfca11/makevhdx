@@ -29,10 +29,13 @@
     <ClInclude Include="generated-constants.cpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="MakeVHDX.h">
+    <ClInclude Include="ConvertImage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ConvertImage.h">
+    <ClInclude Include="VHD_VHDX_Base.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VHD_VHDX_Image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

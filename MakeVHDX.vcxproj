@@ -115,7 +115,8 @@
     <ClInclude Include="ConvertImage.h" />
     <ClInclude Include="crc32c.h" />
     <ClInclude Include="generated-constants.cpp" />
-    <ClInclude Include="MakeVHDX.h" />
+    <ClInclude Include="VHD_VHDX_Base.h" />
+    <ClInclude Include="VHD_VHDX_Image.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
