@@ -18,7 +18,7 @@
     <ClCompile Include="crc32c.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="MakeVHDX.cpp">
+    <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -27,6 +27,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="generated-constants.cpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MakeVHDX.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ConvertImage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
