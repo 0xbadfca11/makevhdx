@@ -110,34 +110,10 @@ public:
 
   void WriteHeader() const
   {
-    if (vhd_footer.DiskType == VHDType::Fixed)
-    {
+    if (vhd_footer.DiskType == VHDType::Fixed) {
       WriteFileWithOffset(image, vhd_footer, vhd_disk_size);
-      return;
     }
-    else if (vhd_footer.DiskType == VHDType::Dynamic)
-    {
-      WriteFileWithOffset(image, vhd_footer, 0);
-      WriteFileWithOffset(image, vhd_dyn_header, sizeof vhd_footer);
-      WriteFileWithOffset(image, vhd_block_allocation_table.get(), vhd_table_write_size, sizeof vhd_footer + sizeof vhd_dyn_header);
-      WriteFileWithOffset(image, vhd_footer, vhd_next_free_address);
-
-      _ASSERT(IsAligned());
-      auto vhd_bitmap_buffer = std::make_unique<BYTE[]>(vhd_bitmap_aligned_size);
-      memset(vhd_bitmap_buffer.get() + vhd_bitmap_padding_size, 0xFF, vhd_bitmap_size);
-      for (UINT32 i = 0; i < vhd_table_entries_count; i++)
-      {
-        if (vhd_block_allocation_table[i] != VHD_UNUSED_BAT_ENTRY)
-        {
-          WriteFileWithOffset(image, vhd_bitmap_buffer.get(), vhd_bitmap_aligned_size, 1ULL * vhd_block_allocation_table[i] * VHD_SECTOR_SIZE - vhd_bitmap_padding_size);
-        }
-      }
-      return;
-    }
-    else
-    {
-      die(L"BUG");
-    }
+    VHD::WriteHeaderToFile(image);
   }
   UINT64 AllocateBlockForWrite(UINT32 index)
   {
@@ -323,7 +299,7 @@ public:
     }
     void WriteHeader() const
     {
-      VHDX::WriteHeader(image);
+      WriteHeaderToFile(image);
     }
     UINT64 AllocateBlockForWrite(UINT32 index)
     {

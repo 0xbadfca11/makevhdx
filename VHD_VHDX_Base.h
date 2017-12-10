@@ -15,8 +15,18 @@
 #include <type_traits>
 #include <fcntl.h>
 #include <io.h>
+#include <vector>
 #include "crc32c.h"
 
+
+struct VHD_VHDX_IF
+{
+public:
+  virtual ~VHD_VHDX_IF() {}
+  virtual void WriteHeaderToBuffer(std::vector<BYTE> &buffer) const = 0;
+  virtual void WriteFooterToBuffer(std::vector<BYTE> &buffer) const = 0;
+  virtual void ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_size, bool is_fixed, FILE_END_OF_FILE_INFO &eof_info) = 0;
+};
 
 #pragma region misc
 constexpr UINT32 byteswap32(UINT32 v) noexcept
@@ -102,6 +112,20 @@ VOID WriteFileWithOffset(
     die();
   }
 }
+ULONGLONG WriteBufferWithOffset(
+  std::vector<BYTE> &outBuffer,
+  _In_reads_bytes_(nNumberOfBytesToWrite) LPCVOID lpBuffer,
+  _In_ ULONG nNumberOfBytesToWrite,
+  _In_ ULONGLONG Offset
+)
+{
+  _ASSERT(Offset % 512 == 0);
+  outBuffer.reserve(Offset + nNumberOfBytesToWrite);
+  outBuffer.resize(Offset + nNumberOfBytesToWrite);
+  memcpy(&outBuffer.data()[Offset], lpBuffer, nNumberOfBytesToWrite);
+  return Offset + nNumberOfBytesToWrite;
+}
+
 template <typename Ty>
 VOID WriteFileWithOffset(
   _In_ HANDLE hFile,
@@ -112,6 +136,18 @@ VOID WriteFileWithOffset(
   static_assert(!std::is_pointer_v<Ty>);
   WriteFileWithOffset(hFile, &lpBuffer, sizeof(Ty), Offset);
 }
+
+template <typename Ty>
+ULONGLONG WriteBufferWithOffset(
+  std::vector<BYTE> &outBuffer,
+  _In_ const Ty& lpBuffer,
+  _In_ ULONGLONG Offset
+)
+{
+  static_assert(!std::is_pointer_v<Ty>);
+  return WriteBufferWithOffset(outBuffer, &lpBuffer, sizeof(Ty), Offset);
+}
+
 #pragma endregion
 #pragma region VHD
 const UINT64 VHD_COOKIE = 0x78697463656e6f63;
@@ -384,7 +420,7 @@ void VHDXChecksumUpdate(Ty* header)
   _ASSERT(VHDXChecksumValidate(*header));
 }
 #pragma endregion
-struct VHD
+struct VHD : public VHD_VHDX_IF
 {
 protected:
   const UINT32 require_alignment;
@@ -568,9 +604,53 @@ public:
       die();
     }
   }
- 
+  
+  void WriteHeaderToBuffer(std::vector<BYTE> &buffer) const
+  {
+    buffer.clear();
+    if (vhd_footer.DiskType == VHDType::Fixed)
+    {
+      return;
+    }
+    else if (vhd_footer.DiskType == VHDType::Dynamic)
+    {
+      WriteBufferWithOffset(buffer, vhd_footer, 0);
+      WriteBufferWithOffset(buffer, vhd_dyn_header, sizeof vhd_footer);
+      WriteBufferWithOffset(buffer, vhd_block_allocation_table.get(), vhd_table_write_size, sizeof vhd_footer + sizeof vhd_dyn_header);
+      WriteBufferWithOffset(buffer, vhd_footer, vhd_next_free_address);
+
+      _ASSERT(IsAligned());
+      auto vhd_bitmap_buffer = std::make_unique<BYTE[]>(vhd_bitmap_aligned_size);
+      memset(vhd_bitmap_buffer.get() + vhd_bitmap_padding_size, 0xFF, vhd_bitmap_size);
+      for (UINT32 i = 0; i < vhd_table_entries_count; i++)
+      {
+        if (vhd_block_allocation_table[i] != VHD_UNUSED_BAT_ENTRY)
+        {
+          WriteBufferWithOffset(buffer, vhd_bitmap_buffer.get(), vhd_bitmap_aligned_size, 1ULL * vhd_block_allocation_table[i] * VHD_SECTOR_SIZE - vhd_bitmap_padding_size);
+        }
+      }
+    }
+    else
+    {
+      die(L"BUG");
+    }
+  }
+
+  void WriteHeaderToFile(HANDLE image) const
+  {
+    std::vector<BYTE> buffer;
+    WriteHeaderToBuffer(buffer);
+    WriteFileWithOffset(image, buffer.data(), (ULONG) buffer.size(), 0);
+  }
+
+  void WriteFooterToBuffer(std::vector<BYTE> &buffer) const
+  {
+    buffer.clear();
+    buffer.reserve(sizeof(VHD_FOOTER));
+    memcpy(buffer.data(), &vhd_footer, sizeof(VHD_FOOTER));
+  }
 };
-struct VHDX
+struct VHDX : public VHD_VHDX_IF
 {
 
 protected:
@@ -586,7 +666,7 @@ protected:
   UINT32 vhdx_data_blocks_count;
   UINT32 vhdx_table_write_size;
 public:
-  VHDX(UINT32 require_alignment) : require_alignment(ROUNDUP(require_alignment, VHDX_MINIMUM_ALIGNMENT))
+  VHDX(UINT32 require_alignment= VHDX_MINIMUM_ALIGNMENT) : require_alignment(ROUNDUP(require_alignment, VHDX_MINIMUM_ALIGNMENT))
   {
     if (!is_power_of_2(require_alignment))
     {
@@ -691,17 +771,31 @@ public:
       eof_info.EndOfFile.QuadPart = vhdx_next_free_address;
     }
   }
-  void WriteHeader(HANDLE image) const
+  void WriteHeaderToBuffer(std::vector<BYTE> &buffer) const
   {
-    WriteFileWithOffset(image, vhdx_file_indentifier, VHDX_FILE_IDENTIFIER_OFFSET);
-    WriteFileWithOffset(image, vhdx_header, VHDX_HEADER1_OFFSET);
-    WriteFileWithOffset(image, vhdx_header, VHDX_HEADER2_OFFSET);
-    WriteFileWithOffset(image, vhdx_region_table_header, VHDX_REGION_TABLE_HEADER1_OFFSET);
-    WriteFileWithOffset(image, vhdx_region_table_header, VHDX_REGION_TABLE_HEADER2_OFFSET);
-    WriteFileWithOffset(image, vhdx_metadata_table_header, VHDX_METADATA_LOCATION);
-    WriteFileWithOffset(image, vhdx_metadata_packed, VHDX_METADATA_LOCATION + VHDX_METADATA_START_OFFSET);
-    WriteFileWithOffset(image, vhdx_block_allocation_table.get(), vhdx_table_write_size, VHDX_BAT_LOCATION);
+    buffer.clear();
+    WriteBufferWithOffset(buffer, vhdx_file_indentifier, VHDX_FILE_IDENTIFIER_OFFSET);
+    WriteBufferWithOffset(buffer, vhdx_header, VHDX_HEADER1_OFFSET);
+    WriteBufferWithOffset(buffer, vhdx_header, VHDX_HEADER2_OFFSET);
+    WriteBufferWithOffset(buffer, vhdx_region_table_header, VHDX_REGION_TABLE_HEADER1_OFFSET);
+    WriteBufferWithOffset(buffer, vhdx_region_table_header, VHDX_REGION_TABLE_HEADER2_OFFSET);
+    WriteBufferWithOffset(buffer, vhdx_metadata_table_header, VHDX_METADATA_LOCATION);
+    WriteBufferWithOffset(buffer, vhdx_metadata_packed, VHDX_METADATA_LOCATION + VHDX_METADATA_START_OFFSET);
+    WriteBufferWithOffset(buffer, vhdx_block_allocation_table.get(), vhdx_table_write_size, VHDX_BAT_LOCATION);
   }
+
+  void WriteHeaderToFile(HANDLE image) const
+  {
+    std::vector<BYTE> buffer;
+    WriteHeaderToBuffer(buffer);
+    WriteFileWithOffset(image, buffer.data(), (ULONG) buffer.size(), 0);
+  }
+  void WriteFooterToBuffer(std::vector<BYTE> &buffer) const
+  {
+    buffer.clear();
+  }
+
+
   bool IsAligned() const
   {
     if (require_alignment <= VHDX_MINIMUM_ALIGNMENT)
@@ -755,5 +849,7 @@ public:
       return std::nullopt;
     }
   }
+
 };
+
 
