@@ -647,6 +647,7 @@ public:
   {
     buffer.clear();
     buffer.reserve(sizeof(VHD_FOOTER));
+    buffer.resize(sizeof(VHD_FOOTER));
     memcpy(buffer.data(), &vhd_footer, sizeof(VHD_FOOTER));
   }
 };
