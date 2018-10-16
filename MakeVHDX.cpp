@@ -1,4 +1,5 @@
 #define WIN32_LEAN_AND_MEAN
+#define STRICT_GS_ENABLED
 #define _ATL_NO_AUTOMATIC_NAMESPACE
 #include <atlbase.h>
 #include <atlchecked.h>
@@ -21,7 +22,7 @@
 #pragma region misc
 constexpr UINT32 byteswap32(UINT32 v) noexcept
 {
-	return v >> 24 & 0xFF | v >> 8 & 0xFF << 8 | v << 8 & 0xFF << 16 | v << 24 & 0xFF << 24;
+	return v >> 24 & 0xFF | v >> 8 & 0xFF << 8 | v << 8 & 0xFF << 16 | v << 24;
 }
 static_assert(0x11335577 == byteswap32(0x77553311));
 template <typename Ty1, typename Ty2>
@@ -449,7 +450,7 @@ public:
 			vhd_block_size = 1U << (std::min)(bit_shift, 31UL);
 			if (vhd_block_size < require_alignment)
 			{
-				die(L"VHD isn't aligned.");
+				die(L"VHD block size is smaller than required alignment.");
 			}
 			vhd_table_entries_count = static_cast<UINT32>(vhd_disk_size / vhd_block_size);
 			return;
@@ -478,7 +479,7 @@ public:
 		vhd_block_size = _byteswap_ulong(vhd_dyn_header.BlockSize);
 		if (vhd_block_size < require_alignment)
 		{
-			die(L"VHD isn't aligned.");
+			die(L"VHD block size is smaller than required alignment.");
 		}
 		if (!is_power_of_2(vhd_block_size))
 		{
@@ -511,7 +512,7 @@ public:
 			vhd_block_size = 1U << (std::min)(bit_shift, 31UL);
 			if (vhd_block_size < require_alignment)
 			{
-				die(L"VHD isn't aligned.");
+				die(L"VHD block size is smaller than required alignment.");
 			}
 			vhd_table_entries_count = static_cast<UINT32>(disk_size / vhd_block_size);
 			vhd_footer =
@@ -543,7 +544,7 @@ public:
 		{
 			if (disk_size > VHD_MAX_DISK_SIZE)
 			{
-				die(L"Exceeded max VHD disk size.");
+				die(L"Exceeded maximum dynamic VHD disk size.");
 			}
 			vhd_disk_size = disk_size;
 			vhd_block_size = block_size;
@@ -589,6 +590,10 @@ public:
 		if (vhd_footer.DiskType == VHDType::Fixed)
 		{
 			WriteFileWithOffset(image, vhd_footer, vhd_disk_size);
+			if (!FlushFileBuffers(image))
+			{
+				die();
+			}
 			return;
 		}
 		else if (vhd_footer.DiskType == VHDType::Dynamic)
@@ -607,6 +612,10 @@ public:
 				{
 					WriteFileWithOffset(image, vhd_bitmap_buffer.get(), vhd_bitmap_aligned_size, 1ULL * vhd_block_allocation_table[i] * VHD_SECTOR_SIZE - vhd_bitmap_padding_size);
 				}
+			}
+			if (!FlushFileBuffers(image))
+			{
+				die();
 			}
 			return;
 		}
@@ -855,7 +864,7 @@ public:
 					}
 					else if (vhdx_metadata_table_header.MetadataTableEntries[j].IsRequired)
 					{
-						die(L"Unknown require VHDX metadata found.");
+						die(L"Unknown required VHDX metadata found.");
 					}
 				}
 				vhdx_data_blocks_count = static_cast<UINT32>(CEILING(vhdx_metadata_packed.VirtualDiskSize, vhdx_metadata_packed.VhdxFileParameters.BlockSize));
@@ -863,7 +872,7 @@ public:
 			}
 			else if (vhdx_region_table_header.RegionTableEntries[i].Required)
 			{
-				die(L"Unknown require VHDX region found.");
+				die(L"Unknown required VHDX region found.");
 			}
 		}
 	}
@@ -980,6 +989,10 @@ public:
 		WriteFileWithOffset(image, vhdx_metadata_table_header, VHDX_METADATA_LOCATION);
 		WriteFileWithOffset(image, vhdx_metadata_packed, VHDX_METADATA_LOCATION + VHDX_METADATA_START_OFFSET);
 		WriteFileWithOffset(image, vhdx_block_allocation_table.get(), vhdx_table_write_size, VHDX_BAT_LOCATION);
+		if (!FlushFileBuffers(image))
+		{
+			die();
+		}
 	}
 	bool IsAligned() const
 	{
@@ -1051,7 +1064,7 @@ public:
 			FILE_END_OF_FILE_INFO eof_info;
 			eof_info.EndOfFile.QuadPart = vhdx_next_free_address + vhdx_metadata_packed.VhdxFileParameters.BlockSize;
 			_ASSERT(eof_info.EndOfFile.QuadPart % VHDX_MINIMUM_ALIGNMENT == 0);
-			_ASSERT(eof_info.EndOfFile.QuadPart >= 4 * 1024 * 1024);
+			_ASSERT(eof_info.EndOfFile.QuadPart >= VHDX_BAT_LOCATION + VHDX_MINIMUM_ALIGNMENT);
 			if (!SetFileInformationByHandle(image, FileEndOfFileInfo, &eof_info, sizeof eof_info))
 			{
 				die();
