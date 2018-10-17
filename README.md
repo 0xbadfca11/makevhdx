@@ -18,6 +18,7 @@ Destination  Specifies conversion destination.
 ```
 ## Requirements and Limitations
 - Source and destination must have placed on same ReFS v2 volume.
+- Differencing type can not be source and/or destination.
 ### Convertion from VHD
 - [VHD must be aligned to 4 KB.](https://docs.microsoft.com/en-us/windows-server/administration/performance-tuning/role/hyper-v-server/storage-io-performance#vhd-format)
 - [ReFS must be formatted with 4 KB cluster size.](https://blogs.technet.microsoft.com/filecab/2017/01/13/cluster-size-recommendations-for-refs-and-ntfs/)
