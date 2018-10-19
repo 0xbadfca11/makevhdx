@@ -32,6 +32,7 @@
 
 #include <random>
 #include <algorithm>
+#include <intrin.h>
 
 
 typedef const uint8_t *buffer;
@@ -381,7 +382,7 @@ extern "C" CRC32C_API void crc32c_unittest()
     std::uniform_int_distribution<int> byteDist(0, 255);
     uint8_t *input = new uint8_t[TEST_BUFFER];
     for (int i = 0; i < TEST_BUFFER; ++i)
-        input[i] = byteDist(rd);
+        input[i] = (uint8_t)byteDist(rd);
     int *offsets = new int[TEST_SLICES];
     int *lengths = new int[TEST_SLICES];
     std::uniform_int_distribution<int> lengthDist(0, TEST_BUFFER);

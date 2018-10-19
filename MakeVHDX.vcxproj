@@ -105,15 +105,18 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="MakeVHDX.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="crc32c.cpp">
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Level3</WarningLevel>
       <WarningLevel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Level3</WarningLevel>
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">intrin.h</ForcedIncludeFiles>
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release|x64'">intrin.h</ForcedIncludeFiles>
     </ClCompile>
+    <ClInclude Include="ConvertImage.h" />
     <ClInclude Include="crc32c.h" />
     <ClInclude Include="generated-constants.cpp" />
+    <ClInclude Include="VHD_VHDX_Base.h" />
+    <ClInclude Include="VHD_VHDX_Image.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
