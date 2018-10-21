@@ -552,7 +552,6 @@ public:
 			vhd_bitmap_aligned_size = ROUNDUP(vhd_bitmap_size, require_alignment);
 			vhd_bitmap_padding_size = vhd_bitmap_aligned_size - vhd_bitmap_size;
 			vhd_table_entries_count = static_cast<UINT32>(CEILING(disk_size, block_size));
-			const UINT32 vhd_table_write_address = sizeof vhd_footer + sizeof vhd_dyn_header;
 			vhd_table_write_size = ROUNDUP(vhd_table_entries_count * static_cast<UINT32>(sizeof(VHD_BAT_ENTRY)), require_alignment);
 			vhd_block_allocation_table = std::make_unique<VHD_BAT_ENTRY[]>(vhd_table_write_size / sizeof(VHD_BAT_ENTRY));
 			vhd_next_free_address = ROUNDUP(sizeof vhd_footer + sizeof vhd_dyn_header + vhd_table_write_size, require_alignment);
@@ -577,7 +576,7 @@ public:
 			{
 				VHD_DYNAMIC_COOKIE,
 				VHD_INVALID_OFFSET,
-				_byteswap_uint64(vhd_table_write_address),
+				_byteswap_uint64(sizeof vhd_footer + sizeof vhd_dyn_header),
 				VHD_DYNAMIC_VERSION,
 				_byteswap_ulong(vhd_table_entries_count),
 				_byteswap_ulong(block_size),
@@ -601,7 +600,7 @@ public:
 			WriteFileWithOffset(image, vhd_footer, 0);
 			WriteFileWithOffset(image, vhd_dyn_header, sizeof vhd_footer);
 			WriteFileWithOffset(image, vhd_block_allocation_table.get(), vhd_table_write_size, sizeof vhd_footer + sizeof vhd_dyn_header);
-			WriteFileWithOffset(image, vhd_footer, vhd_next_free_address);
+			WriteFileWithOffset(image, vhd_footer, vhd_next_free_address + require_alignment - sizeof vhd_footer);
 
 			_ASSERT(IsAligned());
 			auto vhd_bitmap_buffer = std::make_unique<BYTE[]>(vhd_bitmap_aligned_size);
