@@ -47,11 +47,11 @@ static_assert(!is_power_of_2(0));
 [[noreturn]]
 void die(PCWSTR err_msg = nullptr)
 {
+	_CrtDbgBreak();
 	if (!err_msg)
 	{
 		FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, GetLastError(), 0, reinterpret_cast<PWSTR>(&err_msg), 0, nullptr);
 	}
-	_CrtDbgBreak();
 	fputws(err_msg, stderr);
 	fputws(L"\n", stderr);
 	ExitProcess(EXIT_FAILURE);
@@ -71,7 +71,6 @@ Ty* ReadFileWithOffset(
 	o.OffsetHigh = static_cast<ULONG>(Offset >> 32);
 	if (!ReadFile(hFile, lpBuffer, nNumberOfBytesToRead, &read, &o) || read != nNumberOfBytesToRead)
 	{
-		_CrtDbgBreak();
 		die();
 	}
 	return lpBuffer;
@@ -99,7 +98,6 @@ VOID WriteFileWithOffset(
 	o.OffsetHigh = static_cast<ULONG>(Offset >> 32);
 	if (!WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, &write, &o) || write != nNumberOfBytesToWrite)
 	{
-		_CrtDbgBreak();
 		die();
 	}
 }
@@ -184,6 +182,8 @@ struct VHD_DYNAMIC_HEADER
 	UINT8  Reserved2[256];
 };
 static_assert(sizeof(VHD_DYNAMIC_HEADER) == 1024);
+const UINT32 VHD_DYNAMIC_HEADER_OFFSET = sizeof(VHD_FOOTER);
+const UINT32 VHD_BLOCK_ALLOC_TABLE_OFFSET = VHD_DYNAMIC_HEADER_OFFSET + sizeof(VHD_DYNAMIC_HEADER);
 template <typename Ty>
 UINT32 VHDChecksumUpdate(Ty* header)
 {
@@ -345,7 +345,7 @@ struct VHDX_FILE_PARAMETERS
 	UINT32 HasParent : 1;
 	UINT32 Reserved : 30;
 };
-enum : UINT32
+enum VHDXBlockState : UINT32
 {
 	PAYLOAD_BLOCK_NOT_PRESENT = 0,
 	PAYLOAD_BLOCK_UNDEFINED = 1,
@@ -394,13 +394,13 @@ private:
 	VHD_DYNAMIC_HEADER vhd_dyn_header;
 	std::unique_ptr<VHD_BAT_ENTRY[]> vhd_block_allocation_table;
 	UINT64 vhd_next_free_address;
+	UINT64 vhd_template_bitmap_address;
 	UINT64 vhd_disk_size;
 	UINT32 vhd_block_size;
-	UINT32 vhd_bitmap_size;
-	UINT32 vhd_bitmap_aligned_size;
+	UINT32 vhd_bitmap_real_size;
 	UINT32 vhd_bitmap_padding_size;
+	UINT32 vhd_bitmap_aligned_size;
 	UINT32 vhd_table_entries_count;
-	UINT32 vhd_table_write_size;
 public:
 	VHD(HANDLE image, UINT32 require_alignment) : image(image), require_alignment(require_alignment)
 	{
@@ -448,11 +448,8 @@ public:
 			ULONG bit_shift;
 			BitScanForward64(&bit_shift, vhd_disk_size);
 			vhd_block_size = 1U << (std::min)(bit_shift, 31UL);
-			if (vhd_block_size < require_alignment)
-			{
-				die(L"VHD block size is smaller than required alignment.");
-			}
-			vhd_table_entries_count = static_cast<UINT32>(vhd_disk_size / vhd_block_size);
+			vhd_block_size = (std::max)(vhd_block_size, require_alignment);
+			vhd_table_entries_count = static_cast<UINT32>(CEILING(vhd_disk_size, vhd_block_size));
 			return;
 		}
 		else if (vhd_footer.DiskType != VHDType::Dynamic)
@@ -485,7 +482,7 @@ public:
 		{
 			die(L"VHD is corrupted.");
 		}
-		vhd_bitmap_size = (std::max)(vhd_block_size / (VHD_SECTOR_SIZE * CHAR_BIT), VHD_SECTOR_SIZE);
+		vhd_bitmap_real_size = (std::max)(vhd_block_size / (VHD_SECTOR_SIZE * CHAR_BIT), VHD_SECTOR_SIZE);
 		vhd_table_entries_count = _byteswap_ulong(vhd_dyn_header.MaxTableEntries);
 		vhd_block_allocation_table = std::make_unique<VHD_BAT_ENTRY[]>(vhd_table_entries_count);
 		ReadFileWithOffset(image, vhd_block_allocation_table.get(), vhd_table_entries_count * sizeof(VHD_BAT_ENTRY), _byteswap_uint64(vhd_dyn_header.TableOffset));
@@ -510,11 +507,8 @@ public:
 			ULONG bit_shift;
 			BitScanForward64(&bit_shift, disk_size);
 			vhd_block_size = 1U << (std::min)(bit_shift, 31UL);
-			if (vhd_block_size < require_alignment)
-			{
-				die(L"VHD block size is smaller than required alignment.");
-			}
-			vhd_table_entries_count = static_cast<UINT32>(disk_size / vhd_block_size);
+			vhd_block_size = (std::max)(vhd_block_size, require_alignment);
+			vhd_table_entries_count = static_cast<UINT32>(CEILING(vhd_disk_size, vhd_block_size));
 			vhd_footer =
 			{
 				VHD_COOKIE,
@@ -548,19 +542,19 @@ public:
 			}
 			vhd_disk_size = disk_size;
 			vhd_block_size = block_size;
-			vhd_bitmap_size = std::max<UINT32>(block_size / (VHD_SECTOR_SIZE * CHAR_BIT), VHD_SECTOR_SIZE);
-			vhd_bitmap_aligned_size = ROUNDUP(vhd_bitmap_size, require_alignment);
-			vhd_bitmap_padding_size = vhd_bitmap_aligned_size - vhd_bitmap_size;
+			vhd_bitmap_real_size = std::max<UINT32>(block_size / (VHD_SECTOR_SIZE * CHAR_BIT), VHD_SECTOR_SIZE);
+			vhd_bitmap_aligned_size = ROUNDUP(vhd_bitmap_real_size, require_alignment);
+			vhd_bitmap_padding_size = vhd_bitmap_aligned_size - vhd_bitmap_real_size;
 			vhd_table_entries_count = static_cast<UINT32>(CEILING(disk_size, block_size));
-			vhd_table_write_size = ROUNDUP(vhd_table_entries_count * static_cast<UINT32>(sizeof(VHD_BAT_ENTRY)), require_alignment);
-			vhd_block_allocation_table = std::make_unique<VHD_BAT_ENTRY[]>(vhd_table_write_size / sizeof(VHD_BAT_ENTRY));
-			vhd_next_free_address = ROUNDUP(sizeof vhd_footer + sizeof vhd_dyn_header + vhd_table_write_size, require_alignment);
+			vhd_block_allocation_table = std::make_unique<VHD_BAT_ENTRY[]>(vhd_table_entries_count);
+			vhd_next_free_address = ROUNDUP(VHD_BLOCK_ALLOC_TABLE_OFFSET + vhd_table_entries_count * sizeof(VHD_BAT_ENTRY), require_alignment);
+			vhd_template_bitmap_address = 0;
 			vhd_footer =
 			{
 				VHD_COOKIE,
 				byteswap32(2),
 				VHD_VERSION,
-				_byteswap_uint64(sizeof vhd_footer),
+				_byteswap_uint64(VHD_DYNAMIC_HEADER_OFFSET),
 				0,
 				0,
 				0,
@@ -576,7 +570,7 @@ public:
 			{
 				VHD_DYNAMIC_COOKIE,
 				VHD_INVALID_OFFSET,
-				_byteswap_uint64(sizeof vhd_footer + sizeof vhd_dyn_header),
+				_byteswap_uint64(VHD_BLOCK_ALLOC_TABLE_OFFSET),
 				VHD_DYNAMIC_VERSION,
 				_byteswap_ulong(vhd_table_entries_count),
 				_byteswap_ulong(block_size),
@@ -597,31 +591,23 @@ public:
 		}
 		else if (vhd_footer.DiskType == VHDType::Dynamic)
 		{
-			WriteFileWithOffset(image, vhd_footer, 0);
-			WriteFileWithOffset(image, vhd_dyn_header, sizeof vhd_footer);
-			WriteFileWithOffset(image, vhd_block_allocation_table.get(), vhd_table_write_size, sizeof vhd_footer + sizeof vhd_dyn_header);
-			WriteFileWithOffset(image, vhd_footer, vhd_next_free_address + require_alignment - sizeof vhd_footer);
-
 			_ASSERT(IsAligned());
-			auto vhd_bitmap_buffer = std::make_unique<BYTE[]>(vhd_bitmap_aligned_size);
-			memset(vhd_bitmap_buffer.get() + vhd_bitmap_padding_size, 0xFF, vhd_bitmap_size);
-			for (UINT32 i = 0; i < vhd_table_entries_count; i++)
-			{
-				if (vhd_block_allocation_table[i] != VHD_UNUSED_BAT_ENTRY)
-				{
-					WriteFileWithOffset(image, vhd_bitmap_buffer.get(), vhd_bitmap_aligned_size, 1ULL * vhd_block_allocation_table[i] * VHD_SECTOR_SIZE - vhd_bitmap_padding_size);
-				}
-			}
+			WriteFileWithOffset(image, vhd_footer, 0);
+			WriteFileWithOffset(image, vhd_dyn_header, VHD_DYNAMIC_HEADER_OFFSET);
+			WriteFileWithOffset(image, vhd_block_allocation_table.get(), vhd_table_entries_count * sizeof(VHD_BAT_ENTRY), VHD_BLOCK_ALLOC_TABLE_OFFSET);
+			WriteFileWithOffset(image, vhd_footer, vhd_next_free_address + require_alignment - sizeof vhd_footer);
+#ifdef _DEBUG
+			LARGE_INTEGER fsize;
+			ATLENSURE(GetFileSizeEx(image, &fsize));
+			_ASSERT(fsize.QuadPart % require_alignment == 0);
+#endif
 			if (!FlushFileBuffers(image))
 			{
 				die();
 			}
 			return;
 		}
-		else
-		{
-			die(L"BUG");
-		}
+		_CrtDbgBreak();
 	}
 	bool IsAligned() const
 	{
@@ -633,7 +619,7 @@ public:
 		{
 			if (vhd_block_allocation_table[i] != VHD_UNUSED_BAT_ENTRY)
 			{
-				if ((vhd_block_allocation_table[i] * VHD_SECTOR_SIZE + vhd_bitmap_size) % require_alignment != 0)
+				if ((vhd_block_allocation_table[i] * VHD_SECTOR_SIZE + vhd_bitmap_real_size) % require_alignment != 0)
 				{
 					_CrtDbgBreak();
 					return false;
@@ -668,16 +654,12 @@ public:
 	}
 	std::optional<UINT64> operator[](UINT32 index) const
 	{
-		if (index > vhd_table_entries_count)
-		{
-			_CrtDbgBreak();
-			die(L"BUG");
-		}
+		_ASSERT(index <= vhd_table_entries_count);
 		if (vhd_footer.DiskType == VHDType::Dynamic)
 		{
 			if (UINT64 block_address = vhd_block_allocation_table[index]; block_address != VHD_UNUSED_BAT_ENTRY)
 			{
-				return block_address * VHD_SECTOR_SIZE + vhd_bitmap_size;
+				return block_address * VHD_SECTOR_SIZE + vhd_bitmap_real_size;
 			}
 			else
 			{
@@ -702,14 +684,10 @@ public:
 		}
 		else
 		{
-			if (IsFixed())
-			{
-				_CrtDbgBreak();
-				die(L"BUG");
-			}
+			_ASSERT(!IsFixed());
 			FILE_END_OF_FILE_INFO eof_info;
 			eof_info.EndOfFile.QuadPart = vhd_next_free_address + vhd_bitmap_aligned_size + vhd_block_size;
-			_ASSERT(eof_info.EndOfFile.QuadPart >= sizeof vhd_footer + sizeof vhd_dyn_header);
+			_ASSERT(eof_info.EndOfFile.QuadPart > VHD_BLOCK_ALLOC_TABLE_OFFSET);
 			if (eof_info.EndOfFile.QuadPart > 1ULL * UINT32_MAX * VHD_SECTOR_SIZE)
 			{
 				SetLastError(ERROR_ARITHMETIC_OVERFLOW);
@@ -719,6 +697,22 @@ public:
 			{
 				die();
 			}
+			ULONG dummy;
+			DUPLICATE_EXTENTS_DATA dup_extent = { image };
+			dup_extent.SourceFileOffset.QuadPart = vhd_template_bitmap_address;
+			dup_extent.TargetFileOffset.QuadPart = vhd_next_free_address;
+			dup_extent.ByteCount.QuadPart = require_alignment;
+			_ASSERT(dup_extent.SourceFileOffset.QuadPart % require_alignment == 0);
+			_ASSERT(dup_extent.TargetFileOffset.QuadPart % require_alignment == 0);
+			_ASSERT((SetLastError(NO_ERROR), true));
+			if (!vhd_template_bitmap_address || !DeviceIoControl(image, FSCTL_DUPLICATE_EXTENTS_TO_FILE, &dup_extent, sizeof dup_extent, nullptr, 0, &dummy, nullptr))
+			{
+				_ASSERT(GetLastError() == NO_ERROR || GetLastError() == ERROR_BLOCK_TOO_MANY_REFERENCES);
+				vhd_template_bitmap_address = vhd_next_free_address;
+				auto vhd_bitmap_buffer = std::make_unique<BYTE[]>(vhd_bitmap_aligned_size);
+				memset(vhd_bitmap_buffer.get() + vhd_bitmap_padding_size, 0xFF, vhd_bitmap_real_size);
+				WriteFileWithOffset(image, vhd_bitmap_buffer.get(), vhd_bitmap_aligned_size, vhd_next_free_address);
+			}
 			vhd_block_allocation_table[index] = static_cast<UINT32>((vhd_next_free_address + vhd_bitmap_padding_size) / VHD_SECTOR_SIZE);
 			vhd_next_free_address += vhd_bitmap_aligned_size + vhd_block_size;
 			return vhd_next_free_address - vhd_block_size;
@@ -727,7 +721,6 @@ public:
 };
 struct VHDX
 {
-
 private:
 	const HANDLE image;
 	const UINT32 require_alignment;
@@ -747,6 +740,11 @@ public:
 		if (!is_power_of_2(require_alignment))
 		{
 			die(L"Require alignment isn't power of 2.");
+		}
+		if (require_alignment > VHDX_MINIMUM_ALIGNMENT)
+		{
+			SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
+			die();
 		}
 	}
 	void ReadHeader()
@@ -840,6 +838,10 @@ public:
 					if (vhdx_metadata_table_header.MetadataTableEntries[j].ItemId == FileParameters)
 					{
 						ReadFileWithOffset(image, &vhdx_metadata_packed.VhdxFileParameters, FileOffset + Offset);
+						if (vhdx_metadata_packed.VhdxFileParameters.HasParent)
+						{
+							die(L"Differencing VHDX is not supported.");
+						}
 					}
 					else if (vhdx_metadata_table_header.MetadataTableEntries[j].ItemId == VirtualDiskSize)
 					{
@@ -877,7 +879,6 @@ public:
 	}
 	void ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_size, bool is_fixed)
 	{
-		ATLENSURE(require_alignment >= VHDX_MINIMUM_ALIGNMENT);
 		if (disk_size > VHDX_MAX_DISK_SIZE)
 		{
 			die(L"Exceeded max VHDX disk size.");
@@ -968,10 +969,9 @@ public:
 			{
 				vhdx_block_allocation_table[i + i / vhdx_chuck_ratio].State = PAYLOAD_BLOCK_FULLY_PRESENT;
 				vhdx_block_allocation_table[i + i / vhdx_chuck_ratio].FileOffsetMB = vhdx_next_free_address / VHDX_BLOCK_1MB;
-				vhdx_next_free_address += block_size;
 			}
 			FILE_END_OF_FILE_INFO eof_info;
-			eof_info.EndOfFile.QuadPart = vhdx_next_free_address;
+			eof_info.EndOfFile.QuadPart = vhdx_next_free_address + 1ULL * block_size * vhdx_data_blocks_count;
 			if (!SetFileInformationByHandle(image, FileEndOfFileInfo, &eof_info, sizeof eof_info))
 			{
 				die();
@@ -1031,13 +1031,9 @@ public:
 	}
 	std::optional<UINT64> operator[](UINT32 index) const
 	{
-		if (index > vhdx_data_blocks_count)
-		{
-			_CrtDbgBreak();
-			die(L"BUG");
-		}
+		_ASSERT(index <= vhdx_data_blocks_count);
 		index += index / vhdx_chuck_ratio;
-		if (vhdx_block_allocation_table[index].State == PAYLOAD_BLOCK_FULLY_PRESENT)
+		if (vhdx_block_allocation_table[index].State == VHDXBlockState::PAYLOAD_BLOCK_FULLY_PRESENT)
 		{
 			return vhdx_block_allocation_table[index].FileOffsetMB * VHDX_BLOCK_1MB;
 		}
@@ -1054,11 +1050,7 @@ public:
 		}
 		else
 		{
-			if (IsFixed())
-			{
-				_CrtDbgBreak();
-				die(L"BUG");
-			}
+			_ASSERT(!IsFixed());
 			index += index / vhdx_chuck_ratio;
 			FILE_END_OF_FILE_INFO eof_info;
 			eof_info.EndOfFile.QuadPart = vhdx_next_free_address + vhdx_metadata_packed.VhdxFileParameters.BlockSize;
@@ -1092,7 +1084,6 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 	ATL::CHandle src_file(CreateFileW(src_file_name, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
 	if (src_file == INVALID_HANDLE_VALUE)
 	{
-		_CrtDbgBreak();
 		src_file.Detach();
 		die();
 	}
@@ -1141,7 +1132,6 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 #endif
 	if (dst_file == INVALID_HANDLE_VALUE)
 	{
-		_CrtDbgBreak();
 		dst_file.Detach();
 		die();
 	}
@@ -1188,12 +1178,11 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 				dup_extent.SourceFileOffset.QuadPart = *read_physical_address;
 				dup_extent.TargetFileOffset.QuadPart = dst_img.AllocateBlockForWrite(write_virtual_block_number) + write_virtual_block_offset;
 				dup_extent.ByteCount.QuadPart = source_block_size;
-				_ASSERTE(dup_extent.SourceFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
-				_ASSERTE(dup_extent.TargetFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
-				_ASSERTE(dup_extent.ByteCount.QuadPart % get_integrity.ClusterSizeInBytes == 0);
+				_ASSERT(dup_extent.SourceFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
+				_ASSERT(dup_extent.TargetFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
+				_ASSERT(dup_extent.ByteCount.QuadPart % get_integrity.ClusterSizeInBytes == 0);
 				if (!DeviceIoControl(dst_file, FSCTL_DUPLICATE_EXTENTS_TO_FILE, &dup_extent, sizeof dup_extent, nullptr, 0, &dummy, nullptr))
 				{
-					_CrtDbgBreak();
 					die();
 				}
 			}
@@ -1213,12 +1202,11 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 					dup_extent.SourceFileOffset.QuadPart = *read_physical_address + read_block_offset;
 					dup_extent.TargetFileOffset.QuadPart = dst_img.AllocateBlockForWrite(write_virtual_block_number);
 					dup_extent.ByteCount.QuadPart = destination_block_size;
-					_ASSERTE(dup_extent.SourceFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
-					_ASSERTE(dup_extent.TargetFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
-					_ASSERTE(dup_extent.ByteCount.QuadPart % get_integrity.ClusterSizeInBytes == 0);
+					_ASSERT(dup_extent.SourceFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
+					_ASSERT(dup_extent.TargetFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
+					_ASSERT(dup_extent.ByteCount.QuadPart % get_integrity.ClusterSizeInBytes == 0);
 					if (!DeviceIoControl(dst_file, FSCTL_DUPLICATE_EXTENTS_TO_FILE, &dup_extent, sizeof dup_extent, nullptr, 0, &dummy, nullptr))
 					{
-						_CrtDbgBreak();
 						die();
 					}
 				}
