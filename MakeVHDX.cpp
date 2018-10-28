@@ -16,7 +16,7 @@
 #include <type_traits>
 #include <fcntl.h>
 #include <io.h>
-#include "crc32c.h"
+#pragma comment(lib, "ntdll")
 #pragma comment(lib, "pathcch")
 
 #pragma region misc
@@ -375,13 +375,13 @@ bool VHDXChecksumValidate(Ty header)
 {
 	const UINT32 Checksum = header.Checksum;
 	header.Checksum = 0;
-	return crc32c_append(0, static_cast<uint8_t*>(static_cast<void*>(&header)), sizeof(Ty)) == Checksum;
+	return RtlCrc32(&header, sizeof(Ty), 0) == Checksum;
 }
 template <typename Ty>
 void VHDXChecksumUpdate(Ty* header)
 {
 	header->Checksum = 0;
-	header->Checksum = crc32c_append(0, static_cast<uint8_t*>(static_cast<void*>(header)), sizeof(Ty));
+	header->Checksum = RtlCrc32(header, sizeof(Ty), 0);
 	_ASSERT(VHDXChecksumValidate(*header));
 }
 #pragma endregion

@@ -30,6 +30,4 @@ Destination  Specifies conversion destination.
 - Output image will be large. This tool does not inspect file system free space in image, or zero-ed data block.
 
 ## License
-MIT License  
-Except `crc32c.cpp`, `crc32c.h` and `generated-constants.cpp`.
-[These files under the zlib license.](https://crc32c.angeloflogic.com/license/)
+MIT License

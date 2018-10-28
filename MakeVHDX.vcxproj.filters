@@ -15,19 +15,8 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="crc32c.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="MakeVHDX.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="crc32c.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="generated-constants.cpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>
