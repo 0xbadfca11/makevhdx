@@ -1287,7 +1287,7 @@ int __cdecl wmain(int argc, PWSTR argv[])
 			{
 				usage();
 			}
-			options.block_size = wcstoul(argv[i] + 2, nullptr, 0);
+			options.block_size = wcstoul(argv[i] + 2, nullptr, 0) * 1024 * 1024;
 		}
 		else if (source == nullptr)
 		{
