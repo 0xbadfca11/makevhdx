@@ -1,4 +1,4 @@
-# MakeVHDX
+# MakeVHDX [![Build status](https://ci.appveyor.com/api/projects/status/9ugasf69fmwo4gs6)](https://ci.appveyor.com/project/0xbadfca11/makevhdx)
 Converting a VHD/VHDX to VHD/VHDX using [block cloning](https://docs.microsoft.com/windows-server/storage/refs/block-cloning) to share used data blocks.
 This is proof of concept.
 ```

@@ -22,9 +22,9 @@
 #pragma region misc
 constexpr UINT32 byteswap32(UINT32 v) noexcept
 {
-	return v >> 24 & 0xFF | v >> 8 & 0xFF << 8 | v << 8 & 0xFF << 16 | v << 24;
+	return v >> 24 | (v >> 8 & 0xFF << 8) | (v << 8 & 0xFF << 16) | v << 24;
 }
-static_assert(0x11335577 == byteswap32(0x77553311));
+static_assert(0xCC335577 == byteswap32(0x775533CC));
 template <typename Ty1, typename Ty2>
 constexpr Ty1 ROUNDUP(Ty1 number, Ty2 num_digits) noexcept
 {
@@ -688,7 +688,7 @@ public:
 			FILE_END_OF_FILE_INFO eof_info;
 			eof_info.EndOfFile.QuadPart = vhd_next_free_address + vhd_bitmap_aligned_size + vhd_block_size;
 			_ASSERT(eof_info.EndOfFile.QuadPart > VHD_BLOCK_ALLOC_TABLE_OFFSET);
-			if (eof_info.EndOfFile.QuadPart > 1ULL * UINT32_MAX * VHD_SECTOR_SIZE)
+			if (eof_info.EndOfFile.QuadPart > 1LL * UINT32_MAX * VHD_SECTOR_SIZE)
 			{
 				SetLastError(ERROR_ARITHMETIC_OVERFLOW);
 				die();
@@ -957,7 +957,7 @@ public:
 			{ BAT, VHDX_BAT_LOCATION, ROUNDUP(vhdx_table_write_size, require_alignment), 1 }
 		};
 		vhdx_region_table_header.EntryCount = ARRAYSIZE(vhdx_region_table_entry);
-		for (int i = 0; i < ARRAYSIZE(vhdx_region_table_entry); i++)
+		for (UINT32 i = 0; i < ARRAYSIZE(vhdx_region_table_entry); i++)
 		{
 			vhdx_region_table_header.RegionTableEntries[i] = vhdx_region_table_entry[i];
 		}
