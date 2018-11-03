@@ -969,9 +969,10 @@ public:
 			{
 				vhdx_block_allocation_table[i + i / vhdx_chuck_ratio].State = PAYLOAD_BLOCK_FULLY_PRESENT;
 				vhdx_block_allocation_table[i + i / vhdx_chuck_ratio].FileOffsetMB = vhdx_next_free_address / VHDX_BLOCK_1MB;
+				vhdx_next_free_address += vhdx_metadata_packed.VhdxFileParameters.BlockSize;
 			}
 			FILE_END_OF_FILE_INFO eof_info;
-			eof_info.EndOfFile.QuadPart = vhdx_next_free_address + 1ULL * block_size * vhdx_data_blocks_count;
+			eof_info.EndOfFile.QuadPart = vhdx_next_free_address;
 			if (!SetFileInformationByHandle(image, FileEndOfFileInfo, &eof_info, sizeof eof_info))
 			{
 				die();
