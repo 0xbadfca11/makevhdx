@@ -8,82 +8,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include "../VHD.hpp"
 
-struct VHD_FOOTER
-{
-	UINT64 Cookie;
-	UINT32 Features;
-	UINT32 FileFormatVersion;
-	UINT64 DataOffset;
-	UINT32 TimeStamp;
-	UINT32 CreatorApplication;
-	UINT32 CreatorVersion;
-	UINT32 CreatorHostOS;
-	UINT64 OriginalSize;
-	UINT64 CurrentSize;
-	UINT32 DiskGeometry;
-	UINT32 DiskType;
-	UINT32 Checksum;
-	GUID   UniqueId;
-	UINT8  SavedState;
-	UINT8  Reserved[427];
-};
-static_assert(sizeof(VHD_FOOTER) == 512);
-struct VHD_DYNAMIC_HEADER
-{
-	UINT64 Cookie;
-	UINT64 DataOffset;
-	UINT64 TableOffset;
-	UINT32 HeaderVersion;
-	UINT32 MaxTableEntries;
-	UINT32 BlockSize;
-	UINT32 Checksum;
-	UINT8  ParentUniqueId[16];
-	UINT32 ParentTimeStamp;
-	UINT32 Reserved1;
-	UINT16 ParentUnicodeName[256];
-	UINT8  ParentLocatorEntry[24][8];
-	UINT8  Reserved2[256];
-};
-static_assert(sizeof(VHD_DYNAMIC_HEADER) == 1024);
-[[noreturn]]
-void die()
-{
-	_CrtDbgBreak();
-	PCWSTR err_msg;
-	FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, GetLastError(), 0, reinterpret_cast<PWSTR>(&err_msg), 0, nullptr);
-	fputws(err_msg, stderr);
-	fputws(L"\n", stderr);
-	ExitProcess(EXIT_FAILURE);
-}
-template <typename Ty>
-Ty* ReadFileWithOffset(
-	_In_ HANDLE hFile,
-	_Out_writes_bytes_(nNumberOfBytesToRead) __out_data_source(FILE) Ty* lpBuffer,
-	_In_ ULONG nNumberOfBytesToRead,
-	_In_ ULONGLONG Offset
-)
-{
-	static_assert(!std::is_pointer_v<Ty>);
-	ULONG read;
-	OVERLAPPED o = {};
-	o.Offset = static_cast<ULONG>(Offset);
-	o.OffsetHigh = static_cast<ULONG>(Offset >> 32);
-	if (!ReadFile(hFile, lpBuffer, nNumberOfBytesToRead, &read, &o) || read != nNumberOfBytesToRead)
-	{
-		die();
-	}
-	return lpBuffer;
-}
-template <typename Ty>
-Ty* ReadFileWithOffset(
-	_In_ HANDLE hFile,
-	_Out_writes_bytes_(sizeof(Ty)) __out_data_source(FILE) Ty* lpBuffer,
-	_In_ ULONGLONG Offset
-)
-{
-	return ReadFileWithOffset(hFile, lpBuffer, sizeof(Ty), Offset);
-}
 int __cdecl wmain(int, PWSTR argv[])
 {
 	setlocale(LC_ALL, "");

@@ -61,12 +61,9 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalOptions>/Gs0x100000 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <StackCommitSize>0x100000</StackCommitSize>
-      <StackReserveSize>0x100000</StackReserveSize>
     </Link>
     <Manifest>
       <AdditionalManifestFiles>"$(ProjectDir)\longPathAware.manifest" %(AdditionalManifestFiles)</AdditionalManifestFiles>
@@ -86,7 +83,6 @@
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalOptions>/Gs0x100000 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -94,8 +90,6 @@
       <OptimizeReferences>true</OptimizeReferences>
       <TreatLinkerWarningAsErrors>true</TreatLinkerWarningAsErrors>
       <SetChecksum>true</SetChecksum>
-      <StackCommitSize>0x100000</StackCommitSize>
-      <StackReserveSize>0x100000</StackReserveSize>
       <AdditionalDependencies>ucrt.lib;OneCore.Lib;mincore_downlevel.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>libucrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <AdditionalOptions>/PDBALTPATH:%_PDB% %(AdditionalOptions)</AdditionalOptions>
@@ -105,7 +99,16 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ConvertImage.cpp" />
     <ClCompile Include="MakeVHDX.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ConvertImage.hpp" />
+    <ClInclude Include="Image.hpp" />
+    <ClInclude Include="miscutil.hpp" />
+    <ClInclude Include="RAW.hpp" />
+    <ClInclude Include="VHD.hpp" />
+    <ClInclude Include="VHDX.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
