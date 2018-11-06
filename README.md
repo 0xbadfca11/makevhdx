@@ -8,13 +8,19 @@ MakeVHDX [-fixed | -dynamic] [-bN] [-sparse] Source [Destination]
 
 Source       Specifies conversion source.
 Destination  Specifies conversion destination.
-             If not specified, use file extension exchanged with ".vhd" and ".vhdx".
+             If not specified, will use file extension
+             exchanged with ".vhd" when the source is ".vhdx", exchanged with ".vhdx" otherwise.
 -fixed       Make output image is fixed file size type.
 -dynamic     Make output image is variable file size type.
              If neither is specified, will be same type as source.
 -b           Specifies output image block size by 1MB. It must be power of 2.
-             Ignore this indication when output is fixed VHD.
+             Silently ignore, if output is image type that doesn't use blocks. (Such as fixed VHD)
 -sparse      Make output image is sparse file.
+
+Supported Image Types and File Extensions
+ VHDX : .vhdx (.avhdx Disallowed)
+ VHD  : .vhd  (.avhd  Disallowed)
+ RAW  : .* (Other than above)
 ```
 ## Requirements and Limitations
 - Source and destination must have placed on same ReFS v2 volume.
