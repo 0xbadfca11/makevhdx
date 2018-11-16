@@ -16,6 +16,7 @@ Destination  Specifies conversion destination.
 -b           Specifies output image block size by 1MB. It must be power of 2.
              Silently ignore, if output is image type that doesn't use blocks. (Such as fixed VHD)
 -sparse      Make output image is sparse file.
+             By default, output file is also sparse only when source file is sparse.
 
 Supported Image Types and File Extensions
  VHDX : .vhdx (.avhdx Disallowed)

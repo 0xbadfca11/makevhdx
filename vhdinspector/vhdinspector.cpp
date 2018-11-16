@@ -39,21 +39,15 @@ int __cdecl wmain(int, PWSTR argv[])
 		_byteswap_ulong(vhd_footer.DiskGeometry) & 0xFF,
 		_byteswap_ulong(vhd_footer.DiskType)
 	);
-	enum
-	{
-		Fixed = 2,
-		Dynamic = 3,
-		Difference = 4,
-	};
-	if (_byteswap_ulong(vhd_footer.DiskType) == Fixed)
+	if (vhd_footer.DiskType == VHDType::Fixed)
 	{
 		ExitProcess(EXIT_SUCCESS);
 	}
-	else if (_byteswap_ulong(vhd_footer.DiskType) == Difference)
+	else if (vhd_footer.DiskType == VHDType::Difference)
 	{
 		ExitProcess(EXIT_FAILURE);
 	}
-	else if (_byteswap_ulong(vhd_footer.DiskType) != Dynamic || vhd_footer.DataOffset == UINT64_MAX)
+	else if (vhd_footer.DiskType != VHDType::Dynamic || vhd_footer.DataOffset == UINT64_MAX)
 	{
 		ExitProcess(EXIT_FAILURE);
 	}
@@ -95,14 +89,14 @@ int __cdecl wmain(int, PWSTR argv[])
 		_byteswap_ulong(vhd_dyn_header.BlockSize),
 		StrFormatByteSize64A(_byteswap_ulong(vhd_dyn_header.BlockSize), buffer, ARRAYSIZE(buffer))
 	);
-	auto vhd_block_allocation_table = std::make_unique<UINT32[]>(_byteswap_ulong(vhd_dyn_header.MaxTableEntries));
+	auto vhd_block_allocation_table = std::make_unique<VHD_BAT_ENTRY[]>(_byteswap_ulong(vhd_dyn_header.MaxTableEntries));
 	ReadFileWithOffset(h, vhd_block_allocation_table.get(), _byteswap_ulong(vhd_dyn_header.MaxTableEntries) * sizeof(UINT32), _byteswap_uint64(vhd_dyn_header.TableOffset));
 	ULONG unaligned = fsize.QuadPart % 4096;
 	for (UINT32 i = 0; i < _byteswap_ulong(vhd_dyn_header.MaxTableEntries); i++)
 	{
 		if (vhd_block_allocation_table[i] != UINT32_MAX)
 		{
-			unaligned |= (_byteswap_ulong(vhd_block_allocation_table[i]) * 512 + (std::max)(_byteswap_ulong(vhd_dyn_header.BlockSize) / (512 * CHAR_BIT), 512UL)) % 4096;
+			unaligned |= (vhd_block_allocation_table[i] * 512 + (std::max)(_byteswap_ulong(vhd_dyn_header.BlockSize) / (512 * CHAR_BIT), 512UL)) % 4096;
 		}
 	}
 	printf("Alignment\t%u\n", !unaligned);

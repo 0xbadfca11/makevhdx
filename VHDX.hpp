@@ -167,8 +167,8 @@ public:
 			SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
 			die();
 		}
-		const_cast<HANDLE&>(image_file) = file;
-		const_cast<UINT32&>(require_alignment) = cluster_size;
+		image_file = file;
+		require_alignment = cluster_size;
 	}
 	void ReadHeader()
 	{
@@ -214,10 +214,6 @@ public:
 		{
 			die(L"Unknown VHDX header version.");
 		}
-		if (vhdx_header.LogGuid != GUID_NULL)
-		{
-			die(L"VHDX journal log needs recovery.");
-		}
 		auto vhdx_region_table_headers = std::make_unique<VHDX_REGION_TABLE_HEADER[]>(2);
 		ReadFileWithOffset(image_file, &vhdx_region_table_headers[0], VHDX_REGION_TABLE_HEADER1_OFFSET);
 		ReadFileWithOffset(image_file, &vhdx_region_table_headers[1], VHDX_REGION_TABLE_HEADER2_OFFSET);
@@ -261,10 +257,6 @@ public:
 					if (vhdx_metadata_table_header.MetadataTableEntries[j].ItemId == FileParameters)
 					{
 						ReadFileWithOffset(image_file, &vhdx_metadata_packed.VhdxFileParameters, FileOffset + Offset);
-						if (vhdx_metadata_packed.VhdxFileParameters.HasParent)
-						{
-							die(L"Differencing VHDX is not supported.");
-						}
 					}
 					else if (vhdx_metadata_table_header.MetadataTableEntries[j].ItemId == VirtualDiskSize)
 					{
@@ -276,7 +268,7 @@ public:
 					}
 					else if (vhdx_metadata_table_header.MetadataTableEntries[j].ItemId == ParentLocator)
 					{
-						die(L"Differencing VHDX is not supported.");
+						__noop;
 					}
 					else if (vhdx_metadata_table_header.MetadataTableEntries[j].ItemId == PhysicalSectorSize)
 					{
@@ -318,7 +310,7 @@ public:
 		{
 			die(L"Unsuported VHDX sector size.");
 		}
-		if (disk_size % sector_size != 0)
+		if (disk_size == 0 || disk_size % sector_size != 0)
 		{
 			die(L"VHDX disk size is not multiple of sector.");
 		}
@@ -431,45 +423,52 @@ public:
 			die();
 		}
 	}
-	bool IsAligned() const
+	bool CheckConvertible(_Inout_ std::wstring* reason) const
 	{
-		if (require_alignment <= VHDX_MINIMUM_ALIGNMENT)
+		if (vhdx_header.LogGuid != GUID_NULL)
 		{
-			return true;
+			*reason = L"VHDX journal log needs recovery.";
+			return false;
 		}
-		else
+		if (vhdx_metadata_packed.VhdxFileParameters.HasParent)
+		{
+			*reason = L"Differencing VHDX is not supported.";
+			return false;
+		}
+		if (require_alignment > VHDX_MINIMUM_ALIGNMENT)
 		{
 			SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
 			die();
 		}
+		return true;
 	}
-	bool IsFixed() const
+	bool IsFixed() const noexcept
 	{
 		return !!vhdx_metadata_packed.VhdxFileParameters.LeaveBlocksAllocated;
 	}
-	PCSTR GetImageTypeName() const
+	PCSTR GetImageTypeName() const noexcept
 	{
 		return "VHDX";
 	}
-	UINT64 GetDiskSize() const
+	UINT64 GetDiskSize() const noexcept
 	{
 		return vhdx_metadata_packed.VirtualDiskSize;
 	}
-	UINT32 GetSectorSize() const
+	UINT32 GetSectorSize() const noexcept
 	{
 		return vhdx_metadata_packed.LogicalSectorSize;
 	}
-	UINT32 GetBlockSize() const
+	UINT32 GetBlockSize() const noexcept
 	{
 		return vhdx_metadata_packed.VhdxFileParameters.BlockSize;
 	}
-	UINT32 GetTableEntriesCount() const
+	UINT32 GetTableEntriesCount() const noexcept
 	{
 		return vhdx_data_blocks_count;
 	}
-	std::optional<UINT64> ProbeBlock(_In_ UINT32 index) const
+	std::optional<UINT64> ProbeBlock(_In_ UINT32 index) const noexcept
 	{
-		_ASSERT(index <= vhdx_data_blocks_count);
+		_ASSERT(index < vhdx_data_blocks_count);
 		index += index / vhdx_chuck_ratio;
 		if (vhdx_block_allocation_table[index].State == VHDXBlockState::PAYLOAD_BLOCK_FULLY_PRESENT)
 		{
@@ -517,6 +516,5 @@ protected:
 	{
 		header->Checksum = 0;
 		header->Checksum = RtlCrc32(header, sizeof(Ty), 0);
-		_ASSERT(VHDXChecksumValidate(*header));
 	}
 };

@@ -24,7 +24,7 @@ public:
 	}
 	void ConstructHeader(_In_ UINT64 disk_size, _In_ UINT32, _In_ UINT32 sector_size, _In_ bool)
 	{
-		if (disk_size % RAW_SECTOR_SIZE != 0)
+		if (disk_size == 0 || disk_size % RAW_SECTOR_SIZE != 0)
 		{
 			die(L"RAW disk size is not multiple of sector.");
 		}
@@ -49,7 +49,7 @@ public:
 			die();
 		}
 	}
-	bool IsAligned() const noexcept
+	bool CheckConvertible(_Inout_ std::wstring*) const noexcept
 	{
 		return true;
 	}
@@ -65,10 +65,6 @@ public:
 	{
 		return raw_disk_size.QuadPart;
 	}
-	virtual UINT32 GetSectorSize() const noexcept
-	{
-		return RAW_SECTOR_SIZE;
-	}
 	UINT32 GetBlockSize() const noexcept
 	{
 		return raw_block_size;
@@ -79,7 +75,7 @@ public:
 	}
 	std::optional<UINT64> ProbeBlock(_In_ UINT32 index) const noexcept
 	{
-		_ASSERT(index <= GetTableEntriesCount());
+		_ASSERT(index < GetTableEntriesCount());
 		return raw_block_size * index;
 	}
 	UINT64 AllocateBlockForWrite(_In_ UINT32 index) noexcept

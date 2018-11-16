@@ -31,11 +31,12 @@ void usage()
 		L"-b           Specifies output image block size by 1MB. It must be power of 2.\n"
 		L"             Silently ignore, if output is image type that doesn't use blocks. (Such as fixed VHD)\n"
 		L"-sparse      Make output image is sparse file.\n"
-		"\n"
-		"Supported Image Types and File Extensions\n"
-		" VHDX : .vhdx (.avhdx Disallowed)\n"
-		" VHD  : .vhd  (.avhd  Disallowed)\n"
-		" RAW  : .* (Other than above)\n",
+		L"             By default, output file is also sparse only when source file is sparse.\n"
+		L"\n"
+		L"Supported Image Types and File Extensions\n"
+		L" VHDX : .vhdx (.avhdx Disallowed)\n"
+		L" VHD  : .vhd  (.avhd  Disallowed)\n"
+		L" RAW  : .* (Other than above)\n",
 		stderr);
 	ExitProcess(EXIT_FAILURE);
 }

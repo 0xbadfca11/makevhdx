@@ -34,7 +34,12 @@ namespace
 	[[noreturn]]
 	void die(_In_opt_z_ PCWSTR err_msg = nullptr)
 	{
-		_CrtDbgBreak();
+#ifdef _DEBUG
+		if (IsDebuggerPresent())
+		{
+			_CrtDbgBreak();
+		}
+#endif
 		if (!err_msg)
 		{
 			FormatMessageW(

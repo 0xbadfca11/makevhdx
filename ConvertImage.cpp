@@ -72,10 +72,6 @@ void ConvertImage(_In_z_ PCWSTR src_file_name, _In_z_ PCWSTR dst_file_name, _In_
 	auto src_img = DetectImageFormatByData(src_file);
 	src_img->Attach(src_file, get_integrity.ClusterSizeInBytes);
 	src_img->ReadHeader();
-	if (!src_img->IsAligned())
-	{
-		die(L"Source image isn't aligned.");
-	}
 	wprintf(
 		L"Image format:      %hs\n"
 		L"Allocation policy: %hs\n"
@@ -87,6 +83,10 @@ void ConvertImage(_In_z_ PCWSTR src_file_name, _In_z_ PCWSTR dst_file_name, _In_
 		src_img->GetDiskSize() / (1024.f * 1024.f * 1024.f),
 		src_img->GetBlockSize() / (1024.f * 1024.f)
 	);
+	if (std::wstring reason; !src_img->CheckConvertible(&reason))
+	{
+		die(reason.c_str());
+	}
 
 	wprintf(
 		L"\n"
@@ -184,7 +184,7 @@ void ConvertImage(_In_z_ PCWSTR src_file_name, _In_z_ PCWSTR dst_file_name, _In_
 		}
 	}
 
-	_ASSERT(dst_img->IsAligned());
+	_ASSERT(dst_img->CheckConvertible(nullptr));
 	dst_img->WriteHeader();
 	dispos = { FALSE };
 	ATLENSURE(SetFileInformationByHandle(dst_file, FileDispositionInfo, &dispos, sizeof dispos));
