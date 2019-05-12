@@ -23,9 +23,7 @@
     <ProjectGuid>{3AC9B67B-2992-4680-8D2B-7B262F5C0173}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>diskchk</RootNamespace>
-    <WindowsTargetPlatformVersion Condition="'$(Version_Number)' != ''">$(Version_Number)</WindowsTargetPlatformVersion>
-    <WindowsTargetPlatformVersion Condition="'$(Version_Number)' == ''">$(Registry:HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v10.0@ProductVersion).0</WindowsTargetPlatformVersion>
-    <WindowsSDKDesktopARM64Support>true</WindowsSDKDesktopARM64Support>
+    <WindowsTargetPlatformVersion>$(Registry:HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v10.0@ProductVersion).0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

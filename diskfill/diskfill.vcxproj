@@ -23,9 +23,7 @@
     <ProjectGuid>{792A0AFB-CBB0-4D0F-BD6A-410958AF2C7E}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>diskfill</RootNamespace>
-    <WindowsTargetPlatformVersion Condition="'$(Version_Number)' != ''">$(Version_Number)</WindowsTargetPlatformVersion>
-    <WindowsTargetPlatformVersion Condition="'$(Version_Number)' == ''">$(Registry:HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v10.0@ProductVersion).0</WindowsTargetPlatformVersion>
-    <WindowsSDKDesktopARM64Support>true</WindowsSDKDesktopARM64Support>
+    <WindowsTargetPlatformVersion>$(Registry:HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Microsoft SDKs\Windows\v10.0@ProductVersion).0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
