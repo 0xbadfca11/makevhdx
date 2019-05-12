@@ -83,9 +83,9 @@ void ConvertImage(_In_z_ PCWSTR src_file_name, _In_z_ PCWSTR dst_file_name, _In_
 		src_img->GetDiskSize() / (1024.f * 1024.f * 1024.f),
 		src_img->GetBlockSize() / (1024.f * 1024.f)
 	);
-	if (std::wstring reason; !src_img->CheckConvertible(&reason))
+	if (PCWSTR reason; !src_img->CheckConvertible(&reason))
 	{
-		die(reason.c_str());
+		die(reason);
 	}
 
 	wprintf(

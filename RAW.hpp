@@ -49,7 +49,7 @@ public:
 			die();
 		}
 	}
-	bool CheckConvertible(_Inout_ std::wstring*) const noexcept
+	virtual bool CheckConvertible(_When_(return == false, _Outptr_result_z_) PCWSTR*) const noexcept
 	{
 		return true;
 	}

@@ -275,7 +275,7 @@ public:
 		}
 		_CrtDbgBreak();
 	}
-	bool CheckConvertible(_Inout_ std::wstring* reason) const
+	virtual bool CheckConvertible(_When_(return == false, _Outptr_result_z_) PCWSTR* reason) const
 	{
 		if (vhd_footer.DiskType == VHDType::Fixed)
 		{

@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
-#include <string>
 #include "miscutil.hpp"
 
 const UINT32 DEFAULT_SECTOR_SIZE = 512;
@@ -40,7 +39,7 @@ public:
 	virtual void ReadHeader() = 0;
 	virtual void ConstructHeader(_In_ UINT64 disk_size, _In_ UINT32 block_size, _In_ UINT32 sector_size, _In_ bool is_fixed) = 0;
 	virtual void WriteHeader() const = 0;
-	virtual bool CheckConvertible(_Inout_ std::wstring* reason) const = 0;
+	virtual bool CheckConvertible(_When_(return == false, _Outptr_result_z_) PCWSTR* reason) const = 0;
 	virtual bool IsFixed() const noexcept = 0;
 	virtual PCSTR GetImageTypeName() const noexcept = 0;
 	virtual UINT64 GetDiskSize() const noexcept = 0;
