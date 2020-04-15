@@ -1,5 +1,5 @@
-image: Visual Studio 2017
-clone_depth: 1
+image: Visual Studio 2019
+shallow_clone: true
 environment:
   PATH: 'C:\msys64\mingw64\bin;C:\msys64\usr\bin;%PATH%'
   matrix:
@@ -13,7 +13,7 @@ matrix:
   allow_failures:
     - Platform: x64_arm64
 build_script:
-  - call "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Auxiliary\Build\vcvarsall.bat" %Platform%
+  - call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" %Platform%
   - make -B
 test: off
 deploy: off
