@@ -76,7 +76,7 @@ public:
 	std::optional<UINT64> ProbeBlock(_In_ UINT32 index) const noexcept
 	{
 		_ASSERT(index < GetTableEntriesCount());
-		return raw_block_size * index;
+		return 1ULL * raw_block_size * index;
 	}
 	UINT64 AllocateBlockForWrite(_In_ UINT32 index) noexcept
 	{

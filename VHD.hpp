@@ -330,7 +330,7 @@ public:
 		_ASSERT(index < vhd_table_entries_count);
 		if (vhd_footer.DiskType == VHDType::Fixed)
 		{
-			return 1ULL * index * vhd_block_size;
+			return 1ULL * vhd_block_size * index;
 		}
 		if (vhd_footer.DiskType == VHDType::Dynamic)
 		{
