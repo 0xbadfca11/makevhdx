@@ -65,6 +65,10 @@ public:
 	{
 		return raw_disk_size.QuadPart;
 	}
+	UINT32 GetSectorSize() const noexcept
+	{
+		return RAW_SECTOR_SIZE;
+	}
 	UINT32 GetBlockSize() const noexcept
 	{
 		return raw_block_size;

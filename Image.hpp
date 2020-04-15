@@ -9,7 +9,6 @@
 #include <optional>
 #include "miscutil.hpp"
 
-const UINT32 DEFAULT_SECTOR_SIZE = 512;
 class Image
 {
 protected:
@@ -43,10 +42,7 @@ public:
 	virtual bool IsFixed() const noexcept = 0;
 	virtual PCSTR GetImageTypeName() const noexcept = 0;
 	virtual UINT64 GetDiskSize() const noexcept = 0;
-	virtual UINT32 GetSectorSize() const noexcept
-	{
-		return DEFAULT_SECTOR_SIZE;
-	}
+	virtual UINT32 GetSectorSize() const noexcept = 0;
 	virtual UINT32 GetBlockSize() const noexcept = 0;
 	virtual UINT32 GetTableEntriesCount() const noexcept = 0;
 	virtual std::optional<UINT64> ProbeBlock(_In_ UINT32 index) const noexcept = 0;

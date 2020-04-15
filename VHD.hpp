@@ -317,6 +317,10 @@ public:
 	{
 		return vhd_disk_size;
 	}
+	virtual UINT32 GetSectorSize() const noexcept
+	{
+		return VHD_SECTOR_SIZE;
+	}
 	UINT32 GetBlockSize() const noexcept
 	{
 		return vhd_block_size;
