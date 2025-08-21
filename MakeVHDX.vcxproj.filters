@@ -21,25 +21,34 @@
     <ClCompile Include="MakeVHDX.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="VHD.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VHDX.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Image.hpp">
+    <ClInclude Include="Image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VHD.hpp">
+    <ClInclude Include="VHD.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="miscutil.hpp">
+    <ClInclude Include="VHDX.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="VHDX.hpp">
+    <ClInclude Include="RAW.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="RAW.hpp">
+    <ClInclude Include="ConvertImage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ConvertImage.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\wil\natvis\wil.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="longPathAware.manifest" />
   </ItemGroup>
 </Project>

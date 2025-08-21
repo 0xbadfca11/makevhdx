@@ -1,1 +1,0 @@
-Display VHD metadata.

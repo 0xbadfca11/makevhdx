@@ -1,0 +1,1 @@
+Checks: '-clang-diagnostic-missing-field-initializers,-clang-diagnostic-missing-designated-field-initializers,-clang-diagnostic-nonportable-include-path'

@@ -1,33 +1,37 @@
-#include "ConvertImage.hpp"
-#include "VHD.hpp"
-#include "VHDX.hpp"
-#include "RAW.hpp"
+#include <windows.h>
+#include <shlwapi.h>
+#include <iterator>
+#include <stdexcept>
+#include <wil/common.h>
+#include <wil/filesystem.h>
+#include <wil/resource.h>
+#include <wil/result.h>
+#include "ConvertImage.h"
+#include "Image.h"
+#include "RAW.h"
+#include "VHD.h"
+#include "VHDX.h"
+#pragma comment(lib, "shlwapi")
 
-std::unique_ptr<Image> DetectImageFormatByData(_In_ HANDLE file)
+std::unique_ptr<Image> DetectImageFormatByData(HANDLE file)
 {
-	decltype(VHDX_FILE_IDENTIFIER::Signature) vhdx_signature;
-	ReadFileWithOffset(file, &vhdx_signature, VHDX_FILE_IDENTIFIER_OFFSET);
-	if (vhdx_signature == VHDX_SIGNATURE)
+	const auto img_detect_func = {
+		VHDX::DetectImageFormatByData,
+		VHD::DetectImageFormatByData,
+		RAW::DetectImageFormatByData,
+	};
+	for (UINT32 i = 0; i < std::size(img_detect_func); i++)
 	{
-		return std::unique_ptr<Image>(new VHDX);
+		if (auto image = (img_detect_func.begin()[i])(file))
+		{
+			return image;
+		}
 	}
-	LARGE_INTEGER fsize;
-	ATLENSURE(GetFileSizeEx(file, &fsize));
-	decltype(VHD_FOOTER::Cookie) vhd_cookie;
-	ReadFileWithOffset(file, &vhd_cookie, ROUNDUP(fsize.QuadPart - VHD_DYNAMIC_HEADER_OFFSET, sizeof(VHD_FOOTER)));
-	if (vhd_cookie == VHD_COOKIE)
-	{
-		return std::unique_ptr<Image>(new VHD);
-	}
-	if (fsize.LowPart % RAW_SECTOR_SIZE != 0)
-	{
-		die(L"Image type detection failed.");
-	}
-	return std::unique_ptr<Image>(new RAW);
+	return nullptr;
 }
-std::unique_ptr<Image> DetectImageFormatByExtension(_In_z_ PCWSTR file_name)
+std::unique_ptr<Image> DetectImageFormatByExtension(PCWSTR file_name)
 {
-	PCWSTR extension = PathFindExtensionW(file_name);
+	const PCWSTR extension = PathFindExtensionW(file_name);
 	if (_wcsicmp(extension, L".vhdx") == 0)
 	{
 		return std::unique_ptr<Image>(new VHDX);
@@ -36,156 +40,112 @@ std::unique_ptr<Image> DetectImageFormatByExtension(_In_z_ PCWSTR file_name)
 	{
 		return std::unique_ptr<Image>(new VHD);
 	}
-	if (_wcsicmp(extension, L".avhdx") == 0 || _wcsicmp(extension, L".avhd") == 0)
-	{
-		die(L".avhdx/.avhd is not allowed.");
-	}
 	return std::unique_ptr<Image>(new RAW);
 }
-void ConvertImage(_In_z_ PCWSTR src_file_name, _In_z_ PCWSTR dst_file_name, _In_ const Option& options)
+void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& options)
 {
-	wprintf(
-		L"Source\n"
-		L"Path:              %ls\n",
+	printf(
+		"Source\n"
+		"Path:              %ls\n",
 		src_file_name
 	);
-	ATL::CHandle src_file(CreateFileW(src_file_name, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
-	if (src_file == INVALID_HANDLE_VALUE)
-	{
-		src_file.Detach();
-		die();
-	}
+	const auto src_file = wil::open_file(src_file_name, GENERIC_READ, FILE_SHARE_READ, FILE_FLAG_SEQUENTIAL_SCAN);(CreateFileW(src_file_name, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
 	ULONG fs_flags;
-	ATLENSURE(GetVolumeInformationByHandleW(src_file, nullptr, 0, nullptr, nullptr, &fs_flags, nullptr, 0));
-	if (!(fs_flags & FILE_SUPPORTS_BLOCK_REFCOUNTING))
+	THROW_IF_WIN32_BOOL_FALSE(GetVolumeInformationByHandleW(src_file.get(), nullptr, 0, nullptr, nullptr, &fs_flags, nullptr, 0));
+	if (WI_IsFlagClear(fs_flags, FILE_SUPPORTS_BLOCK_REFCOUNTING))
 	{
-		die(L"Filesystem doesn't support Block Cloning feature.");
+		throw std::runtime_error("Filesystem doesn't support Block Cloning feature.");
 	}
 	BY_HANDLE_FILE_INFORMATION file_info;
-	ATLENSURE(GetFileInformationByHandle(src_file, &file_info));
-	ULONG junk;
+	THROW_IF_WIN32_BOOL_FALSE(GetFileInformationByHandle(src_file.get(), &file_info));
+	ULONG _;
 	FSCTL_GET_INTEGRITY_INFORMATION_BUFFER get_integrity;
-	if (!DeviceIoControl(src_file, FSCTL_GET_INTEGRITY_INFORMATION, nullptr, 0, &get_integrity, sizeof get_integrity, &junk, nullptr))
+	THROW_IF_WIN32_BOOL_FALSE(DeviceIoControl(src_file.get(), FSCTL_GET_INTEGRITY_INFORMATION, nullptr, 0, &get_integrity, sizeof get_integrity, &_, nullptr));
+	const auto src_img = DetectImageFormatByData(src_file.get());
+	if (!src_img)
 	{
-		die();
+		throw std::runtime_error("No supported image types detected.");
 	}
-	auto src_img = DetectImageFormatByData(src_file);
-	src_img->Attach(src_file, get_integrity.ClusterSizeInBytes);
+	src_img->Attach(src_file.get(), get_integrity.ClusterSizeInBytes);
 	src_img->ReadHeader();
-	wprintf(
-		L"Image format:      %hs\n"
-		L"Allocation policy: %hs\n"
-		L"Disk size:         %llu(%.3fGB)\n"
-		L"Block size:        %.1fMB\n",
+	printf(
+		"Image format:      %hs\n"
+		"Allocation policy: %hs\n"
+		"Disk size:         %llu(%lluGB)\n"
+		"Block size:        %uMB\n",
 		src_img->GetImageTypeName(),
 		src_img->IsFixed() ? "Preallocate" : "Dynamic",
 		src_img->GetDiskSize(),
-		src_img->GetDiskSize() / (1024.f * 1024.f * 1024.f),
-		src_img->GetBlockSize() / (1024.f * 1024.f)
+		src_img->GetDiskSize() / 1024 / 1024 / 1024,
+		src_img->GetBlockSize() / 1024 / 1024
 	);
-	if (PCWSTR reason; !src_img->CheckConvertible(&reason))
+	if (PCSTR reason; !src_img->CheckConvertible(&reason))
 	{
-		die(reason);
+		throw std::runtime_error(reason);
 	}
 
-	wprintf(
-		L"\n"
-		L"Destination\n"
-		L"Path:              %ls\n",
+	printf(
+		"\n"
+		"Destination\n"
+		"Path:              %ls\n",
 		dst_file_name
 	);
 #ifdef _DEBUG
-	ATL::CHandle dst_file(CreateFileW(dst_file_name, GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, CREATE_ALWAYS, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
+	const auto dst_file = wil::open_or_truncate_existing_file(dst_file_name, GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, FILE_FLAG_SEQUENTIAL_SCAN);
 #else
-	ATL::CHandle dst_file(CreateFileW(dst_file_name, GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, CREATE_NEW, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
+	const auto dst_file = wil::create_new_file(dst_file_name, GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, FILE_FLAG_SEQUENTIAL_SCAN);
 #endif
-	if (dst_file == INVALID_HANDLE_VALUE)
-	{
-		dst_file.Detach();
-		die();
-	}
 	FILE_DISPOSITION_INFO dispos = { TRUE };
-	ATLENSURE(SetFileInformationByHandle(dst_file, FileDispositionInfo, &dispos, sizeof dispos));
+	THROW_IF_WIN32_BOOL_FALSE(SetFileInformationByHandle(dst_file.get(), FileDispositionInfo, &dispos, sizeof dispos));
 	FSCTL_SET_INTEGRITY_INFORMATION_BUFFER set_integrity = { get_integrity.ChecksumAlgorithm, 0, get_integrity.Flags };
-	if (!DeviceIoControl(dst_file, FSCTL_SET_INTEGRITY_INFORMATION, &set_integrity, sizeof set_integrity, nullptr, 0, nullptr, nullptr))
-	{
-		die();
-	}
-	if (options.force_sparse || file_info.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)
-	{
-		if (!DeviceIoControl(dst_file, FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &junk, nullptr))
-		{
-			die();
-		}
-	}
-	auto dst_img = DetectImageFormatByExtension(dst_file_name);
-	dst_img->Attach(dst_file, get_integrity.ClusterSizeInBytes);
-	dst_img->ConstructHeader(src_img->GetDiskSize(), options.block_size, src_img->GetSectorSize(), options.is_fixed.value_or(src_img->IsFixed()));
-	wprintf(
-		L"Image format:      %hs\n"
-		L"Allocation policy: %hs\n"
-		L"Disk size:         %llu(%.3fGB)\n"
-		L"Block size:        %.1fMB\n",
+	THROW_IF_WIN32_BOOL_FALSE(DeviceIoControl(dst_file.get(), FSCTL_SET_INTEGRITY_INFORMATION, &set_integrity, sizeof set_integrity, nullptr, 0, nullptr, nullptr));
+	THROW_IF_WIN32_BOOL_FALSE(DeviceIoControl(dst_file.get(), FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &_, nullptr));
+	const auto dst_img = DetectImageFormatByExtension(dst_file_name);
+	dst_img->Attach(dst_file.get(), get_integrity.ClusterSizeInBytes);
+	dst_img->ConstructHeader(src_img->GetDiskSize(), options.block_size, src_img->GetSectorSize(), options.fixed.value_or(src_img->IsFixed()));
+	printf(
+		"Image format:      %hs\n"
+		"Allocation policy: %hs\n"
+		"Disk size:         %llu(%lluGB)\n"
+		"Block size:        %uMB\n",
 		dst_img->GetImageTypeName(),
 		dst_img->IsFixed() ? "Preallocate" : "Dynamic",
 		dst_img->GetDiskSize(),
-		dst_img->GetDiskSize() / (1024.f * 1024.f * 1024.f),
-		dst_img->GetBlockSize() / (1024.f * 1024.f)
+		dst_img->GetDiskSize() / 1024 / 1024 / 1024,
+		dst_img->GetBlockSize() / 1024 / 1024
 	);
 
 	const UINT32 source_block_size = src_img->GetBlockSize();
 	const UINT32 destination_block_size = dst_img->GetBlockSize();
-	DUPLICATE_EXTENTS_DATA dup_extent = { src_file };
-	if (source_block_size <= destination_block_size)
+	const UINT32 gcd_block_size = (std::min)(source_block_size, destination_block_size);
+	DUPLICATE_EXTENTS_DATA dup_extent = { src_file.get() };
+	for (UINT32 source_block_index = 0; source_block_index < src_img->GetTableEntriesCount(); source_block_index++)
 	{
-		for (UINT32 read_block_number = 0; read_block_number < src_img->GetTableEntriesCount(); read_block_number++)
+		const auto source_block_address = src_img->ProbeBlock(source_block_index);
+		if (!source_block_address)
 		{
-			if (const std::optional<UINT64> read_physical_address = src_img->ProbeBlock(read_block_number))
-			{
-				const UINT64 read_virtual_address = 1ULL * source_block_size * read_block_number;
-				const UINT32 write_virtual_block_number = static_cast<UINT32>(read_virtual_address / destination_block_size);
-				const UINT32 write_virtual_block_offset = static_cast<UINT32>(read_virtual_address % destination_block_size);
-				dup_extent.SourceFileOffset.QuadPart = *read_physical_address;
-				dup_extent.TargetFileOffset.QuadPart = dst_img->AllocateBlockForWrite(write_virtual_block_number) + write_virtual_block_offset;
-				dup_extent.ByteCount.QuadPart = source_block_size;
-				_ASSERT(dup_extent.SourceFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
-				_ASSERT(dup_extent.TargetFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
-				_ASSERT(dup_extent.ByteCount.QuadPart % get_integrity.ClusterSizeInBytes == 0);
-				if (!DeviceIoControl(dst_file, FSCTL_DUPLICATE_EXTENTS_TO_FILE, &dup_extent, sizeof dup_extent, nullptr, 0, &junk, nullptr))
-				{
-					die();
-				}
-			}
+			continue;
 		}
-	}
-	else
-	{
-		for (UINT32 read_block_number = 0; read_block_number < src_img->GetTableEntriesCount(); read_block_number++)
+		const UINT64 source_virtual_address = 1ULL * source_block_size * source_block_index;
+		for (UINT32 i = 0; i < source_block_size / gcd_block_size; i++)
 		{
-			if (const std::optional<UINT64> read_physical_address = src_img->ProbeBlock(read_block_number))
+			const UINT32 source_block_offset = destination_block_size * i;
+			if (source_virtual_address + source_block_offset >= src_img->GetDiskSize())
 			{
-				for (UINT32 i = 0; i < source_block_size / destination_block_size; i++)
-				{
-					const UINT64 read_virtual_address = 1ULL * source_block_size * read_block_number;
-					const UINT32 read_block_offset = destination_block_size * i;
-					const UINT32 write_virtual_block_number = static_cast<UINT32>((read_virtual_address + read_block_offset) / destination_block_size);
-					dup_extent.SourceFileOffset.QuadPart = *read_physical_address + read_block_offset;
-					dup_extent.TargetFileOffset.QuadPart = dst_img->AllocateBlockForWrite(write_virtual_block_number);
-					dup_extent.ByteCount.QuadPart = destination_block_size;
-					_ASSERT(dup_extent.SourceFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
-					_ASSERT(dup_extent.TargetFileOffset.QuadPart % get_integrity.ClusterSizeInBytes == 0);
-					_ASSERT(dup_extent.ByteCount.QuadPart % get_integrity.ClusterSizeInBytes == 0);
-					if (!DeviceIoControl(dst_file, FSCTL_DUPLICATE_EXTENTS_TO_FILE, &dup_extent, sizeof dup_extent, nullptr, 0, &junk, nullptr))
-					{
-						die();
-					}
-				}
+				break;
 			}
+			dup_extent.SourceFileOffset.QuadPart = *source_block_address + source_block_offset;
+			const UINT32 destination_block_index = static_cast<UINT32>((source_virtual_address + source_block_offset) / destination_block_size);
+			const UINT32 destination_block_offset = static_cast<UINT32>(source_virtual_address % destination_block_size);
+			dup_extent.TargetFileOffset.QuadPart = dst_img->AllocateBlock(destination_block_index) + destination_block_offset;
+			dup_extent.ByteCount.QuadPart = gcd_block_size;
+			THROW_IF_WIN32_BOOL_FALSE(DeviceIoControl(dst_file.get(), FSCTL_DUPLICATE_EXTENTS_TO_FILE, &dup_extent, sizeof dup_extent, nullptr, 0, &_, nullptr));
 		}
 	}
 
-	_ASSERT(dst_img->CheckConvertible(nullptr));
 	dst_img->WriteHeader();
+	FILE_SET_SPARSE_BUFFER set_sparse = { options.sparse.value_or(WI_IsFlagSet(file_info.dwFileAttributes, FILE_ATTRIBUTE_SPARSE_FILE)) };
+	THROW_IF_WIN32_BOOL_FALSE(DeviceIoControl(dst_file.get(), FSCTL_SET_SPARSE, &set_sparse, sizeof set_sparse, nullptr, 0, &_, nullptr));
 	dispos = { FALSE };
-	ATLENSURE(SetFileInformationByHandle(dst_file, FileDispositionInfo, &dispos, sizeof dispos));
+	THROW_IF_WIN32_BOOL_FALSE(SetFileInformationByHandle(dst_file.get(), FileDispositionInfo, &dispos, sizeof dispos));
 }
