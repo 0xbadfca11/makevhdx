@@ -1,5 +1,4 @@
 #pragma once
-#include <initguid.h>
 #include "Image.h"
 
 constexpr UINT64 VHDX_SIGNATURE = 0x656C696678646876;
@@ -26,6 +25,7 @@ constexpr UINT32 VHDX_MAX_BLOCK_SIZE = 256 * 1024 * 1024;
 constexpr UINT32 VHDX_DEFAULT_BLOCK_SIZE = 32 * 1024 * 1024;
 constexpr UINT32 VHDX_MINIMUM_ALIGNMENT = 1024 * 1024;
 constexpr UINT32 VHDX_BAT_UNIT = 1024 * 1024;
+constexpr UINT64 VHDX_NUMBER_OF_SECTORS_PER_SECTOR_BITMAP_BLOCK = 1U << 23;
 struct VHDX_FILE_IDENTIFIER
 {
 	UINT64 Signature;
@@ -48,6 +48,10 @@ struct VHDX_HEADER
 	UINT8  Reserved[4016];
 };
 static_assert(sizeof(VHDX_HEADER) == 4096);
+bool inline operator==(const VHDX_HEADER& l, const VHDX_HEADER& r)
+{
+	return memcmp(&l, &r, sizeof(VHDX_HEADER)) == 0;
+}
 struct VHDX_REGION_TABLE_ENTRY
 {
 	GUID   Guid;
@@ -121,7 +125,7 @@ struct VHDX_FILE_PARAMETERS
 static_assert(sizeof(VHDX_FILE_PARAMETERS) == 8);
 struct VHDX : Image
 {
-protected:
+private:
 	VHDX_FILE_IDENTIFIER vhdx_file_indentifier;
 	VHDX_HEADER vhdx_header;
 	VHDX_REGION_TABLE_HEADER vhdx_region_table_header;
@@ -141,50 +145,41 @@ protected:
 	UINT32 vhdx_chuck_ratio;
 	UINT32 vhdx_data_blocks_count;
 	UINT32 vhdx_table_write_size;
+	template <typename Ty>
+	static bool VHDXChecksumValidate(Ty* header);
+	template <typename Ty>
+	static void VHDXChecksumUpdate(Ty* header);
+	static UINT32 CalculateChuckRatio(UINT32 sector_size, UINT32 block_size);
 public:
-	VHDX() = default;
-	void Attach(HANDLE file, UINT32 cluster_size)
-	{
-		if (cluster_size > VHDX_MINIMUM_ALIGNMENT)
-		{
-			THROW_WIN32(ERROR_CALL_NOT_IMPLEMENTED);
-		}
-		Image::Attach(file, cluster_size);
-	}
 	void ReadHeader();
 	void ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_size, bool fixed);
 	void WriteHeader() const;
-	bool CheckConvertible(PCSTR* reason) const;
-	bool IsFixed() const noexcept
+	void CheckConvertible() const;
+	bool IsFixed() const
 	{
-		return !!vhdx_metadata_packed.VhdxFileParameters.LeaveBlocksAllocated;
+		return vhdx_metadata_packed.VhdxFileParameters.LeaveBlocksAllocated;
 	}
-	PCSTR GetImageTypeName() const noexcept
+	PCSTR GetImageTypeName() const
 	{
 		return "VHDX";
 	}
-	UINT64 GetDiskSize() const noexcept
+	UINT64 GetDiskSize() const
 	{
 		return vhdx_metadata_packed.VirtualDiskSize;
 	}
-	UINT32 GetSectorSize() const noexcept
+	UINT32 GetSectorSize() const
 	{
 		return vhdx_metadata_packed.LogicalSectorSize;
 	}
-	UINT32 GetBlockSize() const noexcept
+	UINT32 GetBlockSize() const
 	{
 		return vhdx_metadata_packed.VhdxFileParameters.BlockSize;
 	}
-	UINT32 GetTableEntriesCount() const noexcept
+	UINT32 GetTableEntriesCount() const
 	{
 		return vhdx_data_blocks_count;
 	}
-	std::optional<UINT64> ProbeBlock(UINT32 index) const noexcept;
+	std::optional<UINT64> ProbeBlock(UINT32 index) const;
 	UINT64 AllocateBlock(UINT32 index);
 	static std::unique_ptr<Image> DetectImageFormatByData(HANDLE file);
-protected:
-	template <typename Ty>
-	bool VHDXChecksumValidate(const Ty& header) const;
-	template <typename Ty>
-	void VHDXChecksumUpdate(Ty* header) const;
 };

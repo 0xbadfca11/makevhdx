@@ -1,10 +1,10 @@
 #include <windows.h>
+#include <wil/result.h>
 #include <bit>
 #include <clocale>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <wil/result.h>
 #include "ConvertImage.h"
 #include <crtdbg.h>
 
@@ -14,7 +14,7 @@ void usage()
 	fputs(
 		"Make VHD/VHDX that shares data blocks with source.\n"
 		"\n"
-		"MakeVHDX [-fixed|-dynamic] [-b<N>] [-sparse|-unsparse] <Source> [<Destination>]\n"
+		"MakeVHDX [-fixed|-dynamic] [-b<N>] [-sparse|-nosparse] <Source> [<Destination>]\n"
 		"\n"
 		"Source       Specifies conversion source.\n"
 		"Destination  Specifies conversion destination.\n"
@@ -26,7 +26,7 @@ void usage()
 		"-b           Specifies output image block size by 1MB. It must be power of 2.\n"
 		"             Silently ignore, if output image type doesn't use blocks. (Such as fixed VHD)\n"
 		"-sparse      Make output image is sparse file.\n"
-		"-unsparse    Make output image is non-sparse file.\n"
+		"-nosparse    Make output image is non-sparse file.\n"
 		"             By default, output file is also sparse only when source file is sparse.\n"
 		"\n"
 		"Supported Image Types and File Extensions\n"
@@ -77,7 +77,7 @@ int wmain(int argc, PWSTR argv[])
 			}
 			options.sparse = true;
 		}
-		else if (_wcsicmp(argv[i], L"-unsparse") == 0)
+		else if (_wcsicmp(argv[i], L"-nosparse") == 0)
 		{
 			if (options.sparse)
 			{
@@ -133,9 +133,30 @@ int wmain(int argc, PWSTR argv[])
 	{
 		ConvertImage(source, destination, options);
 		puts("\nDone.");
+#ifdef _DEBUG
+		// because QEMU's autodetection will mistakenly identify fixed VHD as RAW.
+		const bool s_is_vhd = (_wcsicmp(std::filesystem::path(source).extension().c_str(), L".vhd") == 0);
+		const bool d_is_vhd = (_wcsicmp(std::filesystem::path(destination).extension().c_str(), L".vhd") == 0);
+		setlocale(LC_CTYPE, ".utf8");
+		SetConsoleCP(CP_UTF8);
+		SetConsoleOutputCP(CP_UTF8);
+		wil::unique_pipe ps(_popen("Powershell.exe -Command -", "w"));
+		if (d_is_vhd)
+		{
+			fprintf(ps.get(), "$VHD = Get-VHD '%ls';", destination);
+			fprintf(ps.get(), R"(if($VHD.Alignment -EQ 1){Write-Output "$([char]27)[92m"}else{Write-Output "$([char]27)[91m";Write-Output '[BUG]'})");
+			fprintf(ps.get(), R"(Write-Output "$([char]27)[3F";)" "\n");
+			fprintf(ps.get(), "$VHD | Format-List Path,Alignment;");
+			fprintf(ps.get(), R"(Write-Output "$([char]27)[0m$([char]27)[4F";)" "\n");
+		}
+		fprintf(ps.get(), R"(Write-Output "$([char]27)[93m";)");
+		fprintf(ps.get(), R"(qemu-img.exe compare -p %s "%ls" %s "%ls";)", s_is_vhd ? "-f vpc" : "", source, d_is_vhd ? "-F vpc" : "", destination);
+		fprintf(ps.get(), R"(Write-Output "$([char]27)[2F$([char]27)[0m";)" "\n");
+#endif
 	}
-	catch (wil::ResultException e)
+	catch (const wil::ResultException& e)
 	{
+		fputs("\x1B[91m", stderr);
 #ifdef _DEBUG
 		fputs(e.what(), stderr);
 #else
@@ -143,12 +164,14 @@ int wmain(int argc, PWSTR argv[])
 		FAIL_FAST_IF(!FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, e.GetErrorCode(), 0, reinterpret_cast<PWSTR>(&error_msg), 0, nullptr));
 		fputws(error_msg.get(), stderr);
 #endif
+		fputs("\x1B[0m", stderr);
 		return EXIT_FAILURE;
 	}
-	catch (std::exception e)
+	catch (const std::exception& e)
 	{
+		fputs("\x1B[91m", stderr);
 		fputs(e.what(), stderr);
-		fputs("\n", stderr);
+		fputs("\x1B[0m\n", stderr);
 		return EXIT_FAILURE;
 	}
 }

@@ -1,6 +1,3 @@
 *.swp
 *.user
-*.zip
 */
-!diskchk/
-!diskfill/

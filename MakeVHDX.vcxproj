@@ -45,53 +45,52 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(ProjectDir)/wil/include/;$(IncludePath)</IncludePath>
     <EnableClangTidyCodeAnalysis>true</EnableClangTidyCodeAnalysis>
-    <IncludePath>$(ProjectDir)/../wil/include/;$(IncludePath)</IncludePath>
+    <MaxNumberOfProcesses>0</MaxNumberOfProcesses>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(ProjectDir)/wil/include/;$(IncludePath)</IncludePath>
     <EnableClangTidyCodeAnalysis>true</EnableClangTidyCodeAnalysis>
-    <IncludePath>$(ProjectDir)/../wil/include/;$(IncludePath)</IncludePath>
+    <MaxNumberOfProcesses>0</MaxNumberOfProcesses>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
-      <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <ConformanceMode>true</ConformanceMode>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
+      <MinimumRequiredVersion>10</MinimumRequiredVersion>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalOptions>/DEPENDENTLOADFLAG:0x800 %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
-      <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ControlFlowGuard>Guard</ControlFlowGuard>
       <SDLCheck>true</SDLCheck>
-      <RuntimeTypeInfo>false</RuntimeTypeInfo>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <ConformanceMode>true</ConformanceMode>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/Brepro /Zo %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Brepro /d1trimfile:"$(ProjectDir)\" %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
+      <MinimumRequiredVersion>10</MinimumRequiredVersion>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
       <SetChecksum>true</SetChecksum>
       <AdditionalDependencies>ucrt.lib;libvcruntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <IgnoreSpecificDefaultLibraries>libucrt.lib;vcruntime.lib;msvcprt.lib;(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -105,11 +104,6 @@
     <ClCompile Include="VHDX.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Manifest Include="longPathAware.manifest">
-      <SubType>Designer</SubType>
-    </Manifest>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="ConvertImage.h" />
     <ClInclude Include="Image.h" />
     <ClInclude Include="RAW.h" />
@@ -117,7 +111,10 @@
     <ClInclude Include="VHDX.h" />
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="..\wil\natvis\wil.natvis" />
+    <Manifest Include="longPathAware.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="wil\natvis\wil.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

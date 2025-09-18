@@ -1,11 +1,12 @@
+#define NOMINMAX
 #include <windows.h>
 #include <shlwapi.h>
-#include <iterator>
-#include <stdexcept>
 #include <wil/common.h>
 #include <wil/filesystem.h>
 #include <wil/resource.h>
 #include <wil/result.h>
+#include <iterator>
+#include <stdexcept>
 #include "ConvertImage.h"
 #include "Image.h"
 #include "RAW.h"
@@ -15,14 +16,14 @@
 
 std::unique_ptr<Image> DetectImageFormatByData(HANDLE file)
 {
-	const auto img_detect_func = {
+	static const auto img_detect_funcs = {
 		VHDX::DetectImageFormatByData,
 		VHD::DetectImageFormatByData,
 		RAW::DetectImageFormatByData,
 	};
-	for (UINT32 i = 0; i < std::size(img_detect_func); i++)
+	for (auto img_detect_func : img_detect_funcs)
 	{
-		if (auto image = (img_detect_func.begin()[i])(file))
+		if (auto image = img_detect_func(file))
 		{
 			return image;
 		}
@@ -49,7 +50,7 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 		"Path:              %ls\n",
 		src_file_name
 	);
-	const auto src_file = wil::open_file(src_file_name, GENERIC_READ, FILE_SHARE_READ, FILE_FLAG_SEQUENTIAL_SCAN);(CreateFileW(src_file_name, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr));
+	const auto src_file = wil::open_file(src_file_name);
 	ULONG fs_flags;
 	THROW_IF_WIN32_BOOL_FALSE(GetVolumeInformationByHandleW(src_file.get(), nullptr, 0, nullptr, nullptr, &fs_flags, nullptr, 0));
 	if (WI_IsFlagClear(fs_flags, FILE_SUPPORTS_BLOCK_REFCOUNTING))
@@ -68,21 +69,19 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 	}
 	src_img->Attach(src_file.get(), get_integrity.ClusterSizeInBytes);
 	src_img->ReadHeader();
+	char buf[0x20];
 	printf(
 		"Image format:      %hs\n"
 		"Allocation policy: %hs\n"
-		"Disk size:         %llu(%lluGB)\n"
-		"Block size:        %uMB\n",
+		"Disk size:         %llu (%s)\n"
+		"Block size:        %u MB\n",
 		src_img->GetImageTypeName(),
-		src_img->IsFixed() ? "Preallocate" : "Dynamic",
+		src_img->IsFixed() ? "Fixed" : "Dynamic",
 		src_img->GetDiskSize(),
-		src_img->GetDiskSize() / 1024 / 1024 / 1024,
+		StrFormatByteSize64A(src_img->GetDiskSize(), buf, std::size(buf)),
 		src_img->GetBlockSize() / 1024 / 1024
 	);
-	if (PCSTR reason; !src_img->CheckConvertible(&reason))
-	{
-		throw std::runtime_error(reason);
-	}
+	src_img->CheckConvertible();
 
 	printf(
 		"\n"
@@ -90,13 +89,15 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 		"Path:              %ls\n",
 		dst_file_name
 	);
-#ifdef _DEBUG
-	const auto dst_file = wil::open_or_truncate_existing_file(dst_file_name, GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, FILE_FLAG_SEQUENTIAL_SCAN);
-#else
-	const auto dst_file = wil::create_new_file(dst_file_name, GENERIC_READ | GENERIC_WRITE | DELETE, 0, nullptr, FILE_FLAG_SEQUENTIAL_SCAN);
-#endif
+#if _DEBUG
+	const auto dst_file = wil::open_or_truncate_existing_file(dst_file_name, GENERIC_READ | GENERIC_WRITE, 0, nullptr, FILE_FLAG_DELETE_ON_CLOSE);
+#elif NTDDI_VERSION < NTDDI_WIN10_RS3
+	const auto dst_file = wil::create_new_file(dst_file_name, GENERIC_READ | GENERIC_WRITE | DELETE);
 	FILE_DISPOSITION_INFO dispos = { TRUE };
 	THROW_IF_WIN32_BOOL_FALSE(SetFileInformationByHandle(dst_file.get(), FileDispositionInfo, &dispos, sizeof dispos));
+#else
+	const auto dst_file = wil::create_new_file(dst_file_name, GENERIC_READ | GENERIC_WRITE, 0, nullptr, FILE_FLAG_DELETE_ON_CLOSE);
+#endif
 	FSCTL_SET_INTEGRITY_INFORMATION_BUFFER set_integrity = { get_integrity.ChecksumAlgorithm, 0, get_integrity.Flags };
 	THROW_IF_WIN32_BOOL_FALSE(DeviceIoControl(dst_file.get(), FSCTL_SET_INTEGRITY_INFORMATION, &set_integrity, sizeof set_integrity, nullptr, 0, nullptr, nullptr));
 	THROW_IF_WIN32_BOOL_FALSE(DeviceIoControl(dst_file.get(), FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, &_, nullptr));
@@ -106,19 +107,19 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 	printf(
 		"Image format:      %hs\n"
 		"Allocation policy: %hs\n"
-		"Disk size:         %llu(%lluGB)\n"
-		"Block size:        %uMB\n",
+		"Disk size:         %llu (%s)\n"
+		"Block size:        %u MB\n",
 		dst_img->GetImageTypeName(),
-		dst_img->IsFixed() ? "Preallocate" : "Dynamic",
+		dst_img->IsFixed() ? "Fixed" : "Dynamic",
 		dst_img->GetDiskSize(),
-		dst_img->GetDiskSize() / 1024 / 1024 / 1024,
+		StrFormatByteSize64A(dst_img->GetDiskSize(), buf, std::size(buf)),
 		dst_img->GetBlockSize() / 1024 / 1024
 	);
 
-	const UINT32 source_block_size = src_img->GetBlockSize();
-	const UINT32 destination_block_size = dst_img->GetBlockSize();
-	const UINT32 gcd_block_size = (std::min)(source_block_size, destination_block_size);
-	DUPLICATE_EXTENTS_DATA dup_extent = { src_file.get() };
+	const UINT64 source_block_size = src_img->GetBlockSize();
+	const UINT64 destination_block_size = dst_img->GetBlockSize();
+	const UINT64 gcd_block_size = std::min(source_block_size, destination_block_size);
+	DUPLICATE_EXTENTS_DATA dup_extent = { .FileHandle = src_file.get() };
 	for (UINT32 source_block_index = 0; source_block_index < src_img->GetTableEntriesCount(); source_block_index++)
 	{
 		const auto source_block_address = src_img->ProbeBlock(source_block_index);
@@ -126,10 +127,10 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 		{
 			continue;
 		}
-		const UINT64 source_virtual_address = 1ULL * source_block_size * source_block_index;
+		const UINT64 source_virtual_address = source_block_size * source_block_index;
 		for (UINT32 i = 0; i < source_block_size / gcd_block_size; i++)
 		{
-			const UINT32 source_block_offset = destination_block_size * i;
+			const UINT64 source_block_offset = destination_block_size * i;
 			if (source_virtual_address + source_block_offset >= src_img->GetDiskSize())
 			{
 				break;
@@ -146,6 +147,11 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 	dst_img->WriteHeader();
 	FILE_SET_SPARSE_BUFFER set_sparse = { options.sparse.value_or(WI_IsFlagSet(file_info.dwFileAttributes, FILE_ATTRIBUTE_SPARSE_FILE)) };
 	THROW_IF_WIN32_BOOL_FALSE(DeviceIoControl(dst_file.get(), FSCTL_SET_SPARSE, &set_sparse, sizeof set_sparse, nullptr, 0, &_, nullptr));
+#if !_DEBUG && NTDDI_VERSION < NTDDI_WIN10_RS3
 	dispos = { FALSE };
 	THROW_IF_WIN32_BOOL_FALSE(SetFileInformationByHandle(dst_file.get(), FileDispositionInfo, &dispos, sizeof dispos));
+#else
+	FILE_DISPOSITION_INFO_EX fdie = { FILE_DISPOSITION_FLAG_DO_NOT_DELETE | FILE_DISPOSITION_FLAG_ON_CLOSE };
+	THROW_IF_WIN32_BOOL_FALSE(SetFileInformationByHandle(dst_file.get(), FileDispositionInfoEx, &fdie, sizeof fdie));
+#endif
 }

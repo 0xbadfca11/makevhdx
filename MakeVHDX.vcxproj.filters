@@ -46,7 +46,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="..\wil\natvis\wil.natvis" />
+    <Natvis Include="wil\natvis\wil.natvis" />
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="longPathAware.manifest" />

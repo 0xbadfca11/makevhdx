@@ -1,12 +1,15 @@
 #pragma once
+#define NOMINMAX
 #include <windows.h>
+#include <wil/result.h>
+#include <algorithm>
 #include <bit>
-#include <cstdint>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
-#include <wil/result.h>
+#include <crtdbg.h>
 
 constexpr UINT32 MINIMUM_DISK_SIZE = 3 * 1024 * 1024;
 struct Image
@@ -19,11 +22,11 @@ public:
 	Image(const Image&) = delete;
 	Image& operator=(const Image&) = delete;
 	virtual ~Image() = default;
-	virtual void Attach(HANDLE file, UINT32 cluster_size)
+	virtual void Attach(HANDLE file, ULONG cluster_size)
 	{
 		if (!std::has_single_bit(cluster_size))
 		{
-			throw std::runtime_error("Require alignment is not power of 2.");
+			throw std::invalid_argument("Require alignment is not power of 2.");
 		}
 		image_file = file;
 		require_alignment = cluster_size;
@@ -31,25 +34,27 @@ public:
 	virtual void ReadHeader() = 0;
 	virtual void ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_size, bool fixed) = 0;
 	virtual void WriteHeader() const = 0;
-	virtual bool CheckConvertible(PCSTR* reason) const = 0;
-	virtual bool IsFixed() const noexcept = 0;
-	virtual PCSTR GetImageTypeName() const noexcept = 0;
-	virtual UINT64 GetDiskSize() const noexcept = 0;
-	virtual UINT32 GetSectorSize() const noexcept = 0;
-	virtual UINT32 GetBlockSize() const noexcept = 0;
-	virtual UINT32 GetTableEntriesCount() const noexcept = 0;
-	virtual std::optional<UINT64> ProbeBlock(UINT32 index) const noexcept = 0;
+	virtual void CheckConvertible() const = 0;
+	virtual bool IsFixed() const = 0;
+	virtual PCSTR GetImageTypeName() const = 0;
+	virtual UINT64 GetDiskSize() const = 0;
+	virtual UINT32 GetSectorSize() const = 0;
+	virtual UINT32 GetBlockSize() const = 0;
+	virtual UINT32 GetTableEntriesCount() const = 0;
+	virtual std::optional<UINT64> ProbeBlock(UINT32 index) const = 0;
 	virtual UINT64 AllocateBlock(UINT32 index) = 0;
 	static std::unique_ptr<Image> DetectImageFormatByData(HANDLE file) = delete;
 };
 
-constexpr auto inline round_up(auto value, auto base_multiple) noexcept
+[[nodiscard]]
+constexpr auto round_up(auto value, auto base_multiple)
 {
 	return (value + base_multiple - 1) / base_multiple * base_multiple;
 }
 static_assert(round_up(1024 * 8 + 1, 1024) == 1024 * 9);
 
-constexpr auto inline ceil_div(auto value, auto divisor) noexcept
+[[nodiscard]]
+constexpr auto ceil_div(auto value, auto divisor)
 {
 	return static_cast<UINT32>((value + divisor - 1) / divisor);
 }
