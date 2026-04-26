@@ -140,7 +140,7 @@ int wmain(int argc, PWSTR argv[])
 		setlocale(LC_CTYPE, ".utf8");
 		SetConsoleCP(CP_UTF8);
 		SetConsoleOutputCP(CP_UTF8);
-		wil::unique_pipe ps(_popen("Powershell.exe -Command -", "w"));
+		const wil::unique_pipe ps(_popen("Powershell.exe -Command -", "w"));
 		if (d_is_vhd)
 		{
 			fprintf(ps.get(), "$VHD = Get-VHD '%ls';", destination);
@@ -161,8 +161,14 @@ int wmain(int argc, PWSTR argv[])
 		fputs(e.what(), stderr);
 #else
 		wil::unique_hlocal_string error_msg;
-		FAIL_FAST_IF(!FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, e.GetErrorCode(), 0, reinterpret_cast<PWSTR>(&error_msg), 0, nullptr));
-		fputws(error_msg.get(), stderr);
+		if (FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, e.GetErrorCode(), 0, reinterpret_cast<PWSTR>(&error_msg), 0, nullptr))
+		{
+			fputws(error_msg.get(), stderr);
+		}
+		else
+		{
+			fprintf(stderr, "%lx\n", e.GetErrorCode());
+		}
 #endif
 		fputs("\x1B[0m", stderr);
 		return EXIT_FAILURE;

@@ -11,10 +11,9 @@ public:
 	{
 		return std::byteswap(value);
 	}
-	UINT32 operator=(UINT32 rvalue)
+	void operator=(UINT32 rvalue)
 	{
 		value = std::byteswap(rvalue);
-		return rvalue;
 	}
 };
 static_assert(sizeof(VHD_BAT_ENTRY) == sizeof(UINT32));
@@ -51,7 +50,7 @@ struct VHD_FOOTER
 };
 static_assert(sizeof(VHD_FOOTER) == 512);
 constexpr UINT64 VHD_DYNAMIC_COOKIE = 0x6573726170737863;
-constexpr UINT32 VHD_DYNAMIC_VERSION = std::byteswap(1 << 16);
+constexpr UINT32 VHD_DYNAMIC_VERSION = std::byteswap(MAKELONG(0, 1));
 struct VHD_DYNAMIC_HEADER
 {
 	UINT64 Cookie;
@@ -69,15 +68,13 @@ struct VHD_DYNAMIC_HEADER
 	UINT8  Reserved2[256];
 };
 static_assert(sizeof(VHD_DYNAMIC_HEADER) == 1024);
+constexpr UINT32 VHD_STRUCTURE_ALIGNMENT = 512;
 constexpr UINT32 VHD_SECTOR_SIZE = 512;
 constexpr UINT64 VHD_MAX_DYNAMIC_DISK_SIZE = 2040ULL * 1024 * 1024 * 1024;
-constexpr UINT64 VHD_HEADER_LOCATION = 0;
-constexpr UINT32 VHD_FOOTER_OFFSET = 512;
-constexpr UINT32 VHD_FOOTER_ALIGN = 512;
-constexpr UINT64 VHD_DYNAMIC_HEADER_LOCATION = sizeof(VHD_FOOTER);
-constexpr UINT64 VHD_BLOCK_ALLOC_TABLE_LOCATION = VHD_DYNAMIC_HEADER_LOCATION + sizeof(VHD_DYNAMIC_HEADER);
+constexpr UINT64 VHD_HEADER_OFFSET = 0;
+constexpr UINT64 VHD_DYNAMIC_HEADER_OFFSET = sizeof(VHD_FOOTER);
+constexpr UINT64 VHD_BLOCK_ALLOC_TABLE_OFFSET = VHD_DYNAMIC_HEADER_OFFSET + sizeof(VHD_DYNAMIC_HEADER);
 constexpr UINT32 VHD_DEFAULT_BLOCK_SIZE = 2 * 1024 * 1024;
-constexpr UINT32 VHD_SECTOR_ALIGNED_BYTES = VHD_SECTOR_SIZE / sizeof(VHD_BAT_ENTRY);
 struct VHD : Image
 {
 private:
@@ -98,7 +95,7 @@ private:
 	static UINT32 CHSCalculate(UINT64 disk_size);
 public:
 	void ReadHeader();
-	void ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_size, bool is_fixed);
+	void ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_size, bool fixed);
 	void WriteHeader() const;
 	void CheckConvertible() const;
 	bool IsFixed() const

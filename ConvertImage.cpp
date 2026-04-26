@@ -119,7 +119,8 @@ void ConvertImage(PCWSTR src_file_name, PCWSTR dst_file_name, const Option& opti
 	const UINT64 source_block_size = src_img->GetBlockSize();
 	const UINT64 destination_block_size = dst_img->GetBlockSize();
 	const UINT64 gcd_block_size = std::min(source_block_size, destination_block_size);
-	DUPLICATE_EXTENTS_DATA dup_extent = { .FileHandle = src_file.get() };
+	DUPLICATE_EXTENTS_DATA dup_extent;
+	dup_extent.FileHandle = src_file.get();
 	for (UINT32 source_block_index = 0; source_block_index < src_img->GetTableEntriesCount(); source_block_index++)
 	{
 		const auto source_block_address = src_img->ProbeBlock(source_block_index);

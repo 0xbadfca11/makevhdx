@@ -14,12 +14,12 @@ static_assert(ValidateIndexNeverExceeds32bits());
 
 void VHDX::ReadHeader()
 {
-	ReadFileWithOffset(image_file, &vhdx_file_indentifier, VHDX_FILE_IDENTIFIER_LOCATION);
+	ReadFileWithOffset(image_file, &vhdx_file_indentifier, VHDX_FILE_IDENTIFIER_OFFSET);
 	THROW_WIN32_IF(ERROR_VHD_DRIVE_FOOTER_MISSING, vhdx_file_indentifier.Signature != VHDX_SIGNATURE);
 	CreateFileMappingFromApp(image_file, nullptr, PAGE_READONLY, 0, nullptr);
 	const auto vhdx_headers = std::make_unique_for_overwrite<VHDX_HEADER[]>(2);
-	ReadFileWithOffset(image_file, &vhdx_headers[0], VHDX_HEADER1_LOCATION);
-	ReadFileWithOffset(image_file, &vhdx_headers[1], VHDX_HEADER2_LOCATION);
+	ReadFileWithOffset(image_file, &vhdx_headers[0], VHDX_HEADER1_OFFSET);
+	ReadFileWithOffset(image_file, &vhdx_headers[1], VHDX_HEADER2_OFFSET);
 	const bool header1_available = vhdx_headers[0].Signature == VHDX_HEADER_SIGNATURE && VHDXChecksumValidate(&vhdx_headers[0]);
 	const bool header2_available = vhdx_headers[1].Signature == VHDX_HEADER_SIGNATURE && VHDXChecksumValidate(&vhdx_headers[1]);
 	if (!header1_available && !header2_available)
@@ -82,14 +82,17 @@ void VHDX::ReadHeader()
 		else if (vhdx_region_table_header.RegionTableEntries[i].Guid == Metadata)
 		{
 			ReadFileWithOffset(image_file, &vhdx_metadata_table_header, FileOffset);
-			THROW_WIN32_IF(ERROR_VHD_SPARSE_HEADER_CORRUPT, vhdx_metadata_table_header.Signature != VHDX_METADATA_HEADER_SIGNATURE || vhdx_metadata_table_header.EntryCount > VHDX_MAX_ENTRIES);
+			THROW_WIN32_IF(ERROR_VHD_SPARSE_HEADER_CORRUPT, vhdx_metadata_table_header.Signature != VHDX_METADATA_HEADER_SIGNATURE);
+			THROW_WIN32_IF(ERROR_VHD_SPARSE_HEADER_CORRUPT, vhdx_metadata_table_header.EntryCount > VHDX_MAX_ENTRIES);
 			for (UINT32 j = 0; j < vhdx_metadata_table_header.EntryCount; j++)
 			{
 				const UINT32 Offset = vhdx_metadata_table_header.MetadataTableEntries[j].Offset;
 				if (vhdx_metadata_table_header.MetadataTableEntries[j].ItemId == FileParameters)
 				{
 					ReadFileWithOffset(image_file, &vhdx_metadata_packed.VhdxFileParameters, FileOffset + Offset);
-					THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, vhdx_metadata_packed.VhdxFileParameters.BlockSize < VHDX_MIN_BLOCK_SIZE || vhdx_metadata_packed.VhdxFileParameters.BlockSize > VHDX_MAX_BLOCK_SIZE || !std::has_single_bit(vhdx_metadata_packed.VhdxFileParameters.BlockSize));
+					THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, vhdx_metadata_packed.VhdxFileParameters.BlockSize < VHDX_MIN_BLOCK_SIZE);
+					THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, vhdx_metadata_packed.VhdxFileParameters.BlockSize > VHDX_MAX_BLOCK_SIZE);
+					THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, !std::has_single_bit(vhdx_metadata_packed.VhdxFileParameters.BlockSize));
 				}
 				else if (vhdx_metadata_table_header.MetadataTableEntries[j].ItemId == VirtualDiskSize)
 				{
@@ -136,7 +139,9 @@ void VHDX::ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_si
 	{
 		block_size = VHDX_DEFAULT_BLOCK_SIZE;
 	}
-	THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, block_size < VHDX_MIN_BLOCK_SIZE || block_size > VHDX_MAX_BLOCK_SIZE || !std::has_single_bit(block_size));
+	THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, block_size < VHDX_MIN_BLOCK_SIZE);
+	THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, block_size > VHDX_MAX_BLOCK_SIZE);
+	THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, !std::has_single_bit(block_size));
 	if (sector_size != 512 && sector_size != 4096)
 	{
 		throw std::invalid_argument("Unsuported VHDX sector size.");
@@ -155,7 +160,7 @@ void VHDX::ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_si
 	vhdx_header.Signature = VHDX_HEADER_SIGNATURE;
 	vhdx_header.Version = VHDX_CURRENT_VERSION;
 	vhdx_header.LogLength = VHDX_LOG_LENGTH;
-	vhdx_header.LogOffset = VHDX_LOG_LOCATION;
+	vhdx_header.LogOffset = VHDX_LOG_OFFSET;
 	VHDXChecksumUpdate(&vhdx_header);
 	const VHDX_METADATA_TABLE_ENTRY vhdx_metadata_table_entry[] =
 	{
@@ -217,13 +222,13 @@ void VHDX::ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_si
 	{
 		{
 			.Guid = Metadata,
-			.FileOffset = VHDX_METADATA_LOCATION,
+			.FileOffset = VHDX_METADATA_OFFSET,
 			.Length = VHDX_METADATA_LENGTH,
 			.Required = 1
 		},
 		{
 			.Guid = BAT,
-			.FileOffset = VHDX_BAT_LOCATION,
+			.FileOffset = VHDX_BAT_OFFSET,
 			.Length = round_up(vhdx_table_write_size, VHDX_MINIMUM_ALIGNMENT),
 			.Required = 1
 		}
@@ -236,29 +241,30 @@ void VHDX::ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_si
 		vhdx_region_table_header.RegionTableEntries[i] = vhdx_region_table_entry[i];
 	}
 	VHDXChecksumUpdate(&vhdx_region_table_header);
-	vhdx_next_free_address = VHDX_BAT_LOCATION + round_up(vhdx_table_write_size, VHDX_MINIMUM_ALIGNMENT);
+	vhdx_next_free_address = VHDX_BAT_OFFSET + round_up(vhdx_table_write_size, VHDX_MINIMUM_ALIGNMENT);
 	if (fixed)
 	{
-		for (UINT32 i = 0; i < vhdx_data_blocks_count; i++)
+		for (UINT64 i = 0; i < vhdx_data_blocks_count; i++)
 		{
 			vhdx_block_allocation_table[i + i / vhdx_chuck_ratio].State = PAYLOAD_BLOCK_FULLY_PRESENT;
-			vhdx_block_allocation_table[i + i / vhdx_chuck_ratio].FileOffsetMB = vhdx_next_free_address / VHDX_BAT_UNIT;
-			vhdx_next_free_address += vhdx_metadata_packed.VhdxFileParameters.BlockSize;
+			vhdx_block_allocation_table[i + i / vhdx_chuck_ratio].FileOffsetMB = (vhdx_next_free_address + vhdx_metadata_packed.VhdxFileParameters.BlockSize * i) / VHDX_BAT_UNIT;
 		}
+		vhdx_next_free_address += static_cast<UINT64>(vhdx_data_blocks_count) * vhdx_metadata_packed.VhdxFileParameters.BlockSize;
 	}
-	FILE_END_OF_FILE_INFO eof_info = { {.QuadPart = static_cast<LONGLONG>(vhdx_next_free_address) } };
+	FILE_END_OF_FILE_INFO eof_info;
+	eof_info.EndOfFile.QuadPart = vhdx_next_free_address;
 	THROW_IF_WIN32_BOOL_FALSE(SetFileInformationByHandle(image_file, FileEndOfFileInfo, &eof_info, sizeof eof_info));
 }
 void VHDX::WriteHeader() const
 {
-	WriteFileWithOffset(image_file, vhdx_file_indentifier, VHDX_FILE_IDENTIFIER_LOCATION);
-	WriteFileWithOffset(image_file, vhdx_header, VHDX_HEADER1_LOCATION);
-	WriteFileWithOffset(image_file, vhdx_header, VHDX_HEADER2_LOCATION);
+	WriteFileWithOffset(image_file, vhdx_file_indentifier, VHDX_FILE_IDENTIFIER_OFFSET);
+	WriteFileWithOffset(image_file, vhdx_header, VHDX_HEADER1_OFFSET);
+	WriteFileWithOffset(image_file, vhdx_header, VHDX_HEADER2_OFFSET);
 	WriteFileWithOffset(image_file, vhdx_region_table_header, VHDX_REGION_TABLE_HEADER1_OFFSET);
 	WriteFileWithOffset(image_file, vhdx_region_table_header, VHDX_REGION_TABLE_HEADER2_OFFSET);
-	WriteFileWithOffset(image_file, vhdx_metadata_table_header, VHDX_METADATA_LOCATION);
-	WriteFileWithOffset(image_file, vhdx_metadata_packed, VHDX_METADATA_LOCATION + VHDX_METADATA_START_OFFSET);
-	WriteFileWithOffset(image_file, vhdx_block_allocation_table.get(), vhdx_table_write_size, VHDX_BAT_LOCATION);
+	WriteFileWithOffset(image_file, vhdx_metadata_table_header, VHDX_METADATA_OFFSET);
+	WriteFileWithOffset(image_file, vhdx_metadata_packed, VHDX_METADATA_OFFSET + VHDX_METADATA_START_OFFSET);
+	WriteFileWithOffset(image_file, vhdx_block_allocation_table.get(), vhdx_table_write_size, VHDX_BAT_OFFSET);
 #ifdef _DEBUG
 	LARGE_INTEGER fsize;
 	_ASSERT(GetFileSizeEx(image_file, &fsize));
@@ -268,13 +274,11 @@ void VHDX::WriteHeader() const
 }
 void VHDX::CheckConvertible() const
 {
-	if (vhdx_header.LogGuid != GUID_NULL)
+	THROW_WIN32_IF(ERROR_CTLOG_TRACKING_NOT_INITIALIZED, vhdx_header.LogGuid != GUID_NULL);
+	THROW_WIN32_IF(ERROR_VHD_INVALID_TYPE, vhdx_metadata_packed.VhdxFileParameters.HasParent != 0);
+	for (UINT32 i = 0; i < vhdx_data_blocks_count; i++)
 	{
-		throw std::runtime_error("VHDX journal log needs recovery.");
-	}
-	if (vhdx_metadata_packed.VhdxFileParameters.HasParent)
-	{
-		throw std::runtime_error("Differencing VHDX is not supported.");
+		THROW_WIN32_IF(ERROR_VHD_BLOCK_ALLOCATION_TABLE_CORRUPT, vhdx_block_allocation_table[i + i / vhdx_chuck_ratio].State == PAYLOAD_BLOCK_PARTIALLY_PRESENT);
 	}
 	THROW_WIN32_IF(ERROR_CALL_NOT_IMPLEMENTED, require_alignment > VHDX_MINIMUM_ALIGNMENT);
 }
@@ -286,6 +290,7 @@ std::optional<UINT64> VHDX::ProbeBlock(UINT32 index) const
 	{
 		return vhdx_block_allocation_table[index].FileOffsetMB * VHDX_BAT_UNIT;
 	}
+	THROW_WIN32_IF(ERROR_VHD_INVALID_TYPE, vhdx_block_allocation_table[index].State == VHDXBlockState::PAYLOAD_BLOCK_PARTIALLY_PRESENT);
 	return std::nullopt;
 }
 UINT64 VHDX::AllocateBlock(UINT32 index)
@@ -295,9 +300,10 @@ UINT64 VHDX::AllocateBlock(UINT32 index)
 		return *offset;
 	}
 	index += index / vhdx_chuck_ratio;
-	FILE_END_OF_FILE_INFO eof_info = { {.QuadPart = static_cast<LONGLONG>(vhdx_next_free_address + vhdx_metadata_packed.VhdxFileParameters.BlockSize) } };
+	FILE_END_OF_FILE_INFO eof_info;
+	eof_info.EndOfFile.QuadPart = vhdx_next_free_address + vhdx_metadata_packed.VhdxFileParameters.BlockSize;
 	_ASSERT(eof_info.EndOfFile.QuadPart % VHDX_MINIMUM_ALIGNMENT == 0);
-	_ASSERT(std::cmp_greater_equal(eof_info.EndOfFile.QuadPart, VHDX_BAT_LOCATION + VHDX_MINIMUM_ALIGNMENT));
+	_ASSERT(std::cmp_greater_equal(eof_info.EndOfFile.QuadPart, VHDX_BAT_OFFSET + VHDX_MINIMUM_ALIGNMENT));
 	THROW_IF_WIN32_BOOL_FALSE(SetFileInformationByHandle(image_file, FileEndOfFileInfo, &eof_info, sizeof eof_info));
 	vhdx_block_allocation_table[index].FileOffsetMB = vhdx_next_free_address / VHDX_BAT_UNIT;
 	vhdx_block_allocation_table[index].State = PAYLOAD_BLOCK_FULLY_PRESENT;
@@ -308,30 +314,27 @@ std::unique_ptr<Image> VHDX::DetectImageFormatByData(HANDLE file)
 {
 	LARGE_INTEGER fsize;
 	THROW_IF_WIN32_BOOL_FALSE(GetFileSizeEx(file, &fsize));
-	if (std::cmp_less(fsize.QuadPart, VHDX_BAT_LOCATION + VHDX_MINIMUM_ALIGNMENT))
+	if (std::cmp_less(fsize.QuadPart, VHDX_BAT_OFFSET + VHDX_MINIMUM_ALIGNMENT))
 	{
 		return nullptr;
 	}
 	decltype(VHDX_FILE_IDENTIFIER::Signature) vhdx_sig;
-	ReadFileWithOffset(file, &vhdx_sig, VHDX_FILE_IDENTIFIER_LOCATION);
+	ReadFileWithOffset(file, &vhdx_sig, VHDX_FILE_IDENTIFIER_OFFSET);
 	if (vhdx_sig == VHDX_SIGNATURE)
 	{
 		return std::unique_ptr<Image>(new VHDX);
 	}
 	return nullptr;
 }
-template <typename Ty>
-bool VHDX::VHDXChecksumValidate(Ty* header)
+UINT32 VHDX::VHDXChecksumUpdate(auto* header)
 {
-	UINT32 checksum = header->Checksum;
 	header->Checksum = 0;
-	return RtlCrc32(header, sizeof(Ty), 0) == checksum;
+	return header->Checksum = RtlCrc32(header, sizeof(*header), 0);
 }
-template <typename Ty>
-void VHDX::VHDXChecksumUpdate(Ty* header)
+bool VHDX::VHDXChecksumValidate(auto* header)
 {
-	header->Checksum = 0;
-	header->Checksum = RtlCrc32(header, sizeof(Ty), 0);
+	const UINT32 checksum = header->Checksum;
+	return VHDXChecksumUpdate(header) == checksum;
 }
 UINT32 VHDX::CalculateChuckRatio(UINT32 sector_size, UINT32 block_size)
 {

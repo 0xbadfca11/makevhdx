@@ -6,7 +6,6 @@ struct RAW : Image
 {
 private:
 	LARGE_INTEGER raw_disk_size;
-	UINT32 raw_block_size;
 public:
 	void ReadHeader()
 	{
@@ -19,11 +18,10 @@ public:
 		{
 			throw std::runtime_error("RAW disk size is not multiple of sector.");
 		}
-		raw_block_size = std::max(1U << std::min(std::countr_zero<ULONGLONG>(raw_disk_size.QuadPart), 31), require_alignment);
 	}
 	void ConstructHeader(UINT64 disk_size, UINT32, UINT32 sector_size, bool)
 	{
-		if (std::cmp_less(disk_size, MINIMUM_DISK_SIZE))
+		if (disk_size < MINIMUM_DISK_SIZE)
 		{
 			throw std::invalid_argument("RAW disk size is less than 3MB.");
 		}
@@ -40,8 +38,8 @@ public:
 			throw std::invalid_argument("Unsuported RAW sector size.");
 		}
 		raw_disk_size.QuadPart = disk_size;
-		raw_block_size = std::max(1U << std::min(std::countr_zero<ULONGLONG>(disk_size), 31), require_alignment);
-		FILE_END_OF_FILE_INFO eof_info = { {.QuadPart = static_cast<LONGLONG>(disk_size) } };
+		FILE_END_OF_FILE_INFO eof_info;
+		eof_info.EndOfFile.QuadPart = disk_size;
 		THROW_IF_WIN32_BOOL_FALSE(SetFileInformationByHandle(image_file, FileEndOfFileInfo, &eof_info, sizeof eof_info));
 	}
 	void WriteHeader() const
@@ -70,7 +68,7 @@ public:
 	}
 	UINT32 GetBlockSize() const
 	{
-		return raw_block_size;
+		return std::max(1U << std::min(std::countr_zero<ULONGLONG>(raw_disk_size.QuadPart), 31), require_alignment);
 	}
 	UINT32 GetTableEntriesCount() const
 	{

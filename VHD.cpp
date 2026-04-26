@@ -1,25 +1,29 @@
 #include "VHD.h"
+#include <numeric>
 
 void VHD::ReadHeader()
 {
 	LARGE_INTEGER fsize;
 	THROW_IF_WIN32_BOOL_FALSE(GetFileSizeEx(image_file, &fsize));
-	THROW_WIN32_IF(ERROR_VHD_INVALID_FILE_SIZE, std::cmp_less(fsize.QuadPart, VHD_BLOCK_ALLOC_TABLE_LOCATION + VHD_SECTOR_SIZE + sizeof(VHD_FOOTER)));
+	THROW_WIN32_IF(ERROR_VHD_INVALID_FILE_SIZE, std::cmp_less(fsize.QuadPart, VHD_BLOCK_ALLOC_TABLE_OFFSET + VHD_STRUCTURE_ALIGNMENT + sizeof(VHD_FOOTER)));
 	vhd_footer.Reserved[std::size(vhd_footer.Reserved) - 1] = 0;
-	ReadFileWithOffset(image_file, &vhd_footer, sizeof vhd_footer - 1, round_up(fsize.QuadPart - VHD_FOOTER_OFFSET, VHD_FOOTER_ALIGN));
+	const UINT64 vhd_footer_location = round_up(fsize.QuadPart - sizeof(VHD_FOOTER), VHD_STRUCTURE_ALIGNMENT);
+	const UINT32 vhd_footer_size = static_cast<UINT32>(fsize.QuadPart - vhd_footer_location);
+	ReadFileWithOffset(image_file, &vhd_footer, vhd_footer_size, vhd_footer_location);
 	if (vhd_footer.Cookie != VHD_COOKIE || !VHDChecksumValidate(&vhd_footer))
 	{
-		ReadFileWithOffset(image_file, &vhd_footer, VHD_HEADER_LOCATION);
+		ReadFileWithOffset(image_file, &vhd_footer, VHD_HEADER_OFFSET);
 		THROW_WIN32_IF(ERROR_VHD_DRIVE_FOOTER_MISSING, vhd_footer.Cookie != VHD_COOKIE);
 		THROW_WIN32_IF(ERROR_VHD_DRIVE_FOOTER_CHECKSUM_MISMATCH, !VHDChecksumValidate(&vhd_footer));
 	}
 	THROW_WIN32_IF(ERROR_VHD_DRIVE_FOOTER_CORRUPT, WI_IsAnyFlagSet(vhd_footer.Features, ~VHD_VALID_FEATURE_MASK));
 	THROW_WIN32_IF(ERROR_VHD_FORMAT_UNSUPPORTED_VERSION, vhd_footer.FileFormatVersion != VHD_VERSION);
 	vhd_disk_size = std::byteswap(vhd_footer.CurrentSize);
-	THROW_WIN32_IF(ERROR_VHD_INVALID_SIZE, vhd_disk_size == 0 || vhd_disk_size % VHD_SECTOR_SIZE != 0);
+	THROW_WIN32_IF(ERROR_VHD_INVALID_SIZE, vhd_disk_size == 0);
+	THROW_WIN32_IF(ERROR_VHD_INVALID_SIZE, vhd_disk_size % VHD_SECTOR_SIZE != 0);
 	if (vhd_footer.DiskType == VHDType::Fixed)
 	{
-		THROW_WIN32_IF(ERROR_VHD_INVALID_FILE_SIZE, std::cmp_less(round_up(vhd_disk_size - VHD_FOOTER_OFFSET, VHD_FOOTER_ALIGN), fsize.QuadPart));
+		THROW_WIN32_IF(ERROR_VHD_INVALID_FILE_SIZE, std::cmp_less(fsize.QuadPart, round_up(vhd_disk_size - sizeof(VHD_FOOTER), VHD_STRUCTURE_ALIGNMENT)));
 		vhd_block_size = std::max(1U << std::min(std::countr_zero(vhd_disk_size), 31), require_alignment);
 		vhd_table_entries_count = ceil_div(vhd_disk_size, vhd_block_size);
 		return;
@@ -33,8 +37,9 @@ void VHD::ReadHeader()
 	THROW_WIN32_IF(ERROR_VHD_SPARSE_HEADER_CORRUPT, vhd_dyn_header.DataOffset != VHD_INVALID_OFFSET);
 	THROW_WIN32_IF(ERROR_VHD_SPARSE_HEADER_UNSUPPORTED_VERSION, vhd_dyn_header.HeaderVersion != VHD_DYNAMIC_VERSION);
 	vhd_block_size = std::byteswap(vhd_dyn_header.BlockSize);
-	THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, vhd_block_size < VHD_SECTOR_SIZE || !std::has_single_bit(vhd_block_size));
-	vhd_bitmap_actual_size = round_up(vhd_block_size / (VHD_SECTOR_SIZE * CHAR_BIT), VHD_SECTOR_SIZE);
+	THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, vhd_block_size < VHD_SECTOR_SIZE);
+	THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, !std::has_single_bit(vhd_block_size));
+	vhd_bitmap_actual_size = round_up(vhd_block_size / (VHD_SECTOR_SIZE * CHAR_BIT), VHD_STRUCTURE_ALIGNMENT);
 	vhd_table_entries_count = std::byteswap(vhd_dyn_header.MaxTableEntries);
 	vhd_block_allocation_table = std::make_unique_for_overwrite<VHD_BAT_ENTRY[]>(vhd_table_entries_count);
 	ReadFileWithOffset(image_file, vhd_block_allocation_table.get(), vhd_table_entries_count * sizeof(VHD_BAT_ENTRY), std::byteswap(vhd_dyn_header.TableOffset));
@@ -57,7 +62,8 @@ void VHD::ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_siz
 	{
 		block_size = VHD_DEFAULT_BLOCK_SIZE;
 	}
-	THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, vhd_block_size < VHD_SECTOR_SIZE || !std::has_single_bit(block_size));
+	THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, vhd_block_size < VHD_SECTOR_SIZE);
+	THROW_WIN32_IF(ERROR_VHD_INVALID_BLOCK_SIZE, !std::has_single_bit(block_size));
 	if (fixed)
 	{
 		if (std::cmp_greater(disk_size, std::numeric_limits<decltype(FILE_END_OF_FILE_INFO::EndOfFile.QuadPart)>::max() - sizeof vhd_footer))
@@ -81,7 +87,8 @@ void VHD::ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_siz
 		vhd_footer.DiskType = VHDType::Fixed;
 		THROW_IF_FAILED(CoCreateGuid(&vhd_footer.UniqueId));
 		VHDChecksumUpdate(&vhd_footer);
-		FILE_END_OF_FILE_INFO eof_info = { {.QuadPart = static_cast<LONGLONG>(disk_size + sizeof vhd_footer) } };
+		FILE_END_OF_FILE_INFO eof_info;
+		eof_info.EndOfFile.QuadPart = disk_size + sizeof vhd_footer;
 		THROW_IF_WIN32_BOOL_FALSE(SetFileInformationByHandle(image_file, FileEndOfFileInfo, &eof_info, sizeof eof_info));
 		return;
 	}
@@ -91,19 +98,19 @@ void VHD::ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_siz
 	}
 	vhd_disk_size = disk_size;
 	vhd_block_size = block_size;
-	vhd_bitmap_actual_size = round_up(block_size / (VHD_SECTOR_SIZE * CHAR_BIT), VHD_SECTOR_SIZE);
+	vhd_bitmap_actual_size = round_up(block_size / (VHD_SECTOR_SIZE * CHAR_BIT), VHD_STRUCTURE_ALIGNMENT);
 	vhd_bitmap_aligned_size = round_up(vhd_bitmap_actual_size, require_alignment);
 	vhd_bitmap_padding_size = vhd_bitmap_aligned_size - vhd_bitmap_actual_size;
 	vhd_table_entries_count = ceil_div(disk_size, block_size);
-	vhd_table_sector_aligned_count = round_up(vhd_table_entries_count, VHD_SECTOR_ALIGNED_BYTES);
+	vhd_table_sector_aligned_count = static_cast<UINT32>(round_up(vhd_table_entries_count, VHD_SECTOR_SIZE / sizeof(VHD_BAT_ENTRY)));
 	vhd_block_allocation_table = std::make_unique<VHD_BAT_ENTRY[]>(vhd_table_sector_aligned_count);
-	vhd_next_free_address = round_up(VHD_BLOCK_ALLOC_TABLE_LOCATION + vhd_table_sector_aligned_count * sizeof(VHD_BAT_ENTRY), require_alignment);
+	vhd_next_free_address = round_up(VHD_BLOCK_ALLOC_TABLE_OFFSET + vhd_table_sector_aligned_count * sizeof(VHD_BAT_ENTRY), require_alignment);
 	vhd_template_bitmap_address = 0;
 	memset(&vhd_footer, 0, sizeof vhd_footer);
 	vhd_footer.Cookie = VHD_COOKIE;
 	vhd_footer.Features = VHD_FEATURE_RESERVED_MUST_ALWAYS_ON;
 	vhd_footer.FileFormatVersion = VHD_VERSION;
-	vhd_footer.DataOffset = std::byteswap(VHD_DYNAMIC_HEADER_LOCATION);
+	vhd_footer.DataOffset = std::byteswap(VHD_DYNAMIC_HEADER_OFFSET);
 	// [^1]:
 	vhd_footer.CreatorApplication = std::byteswap('qem2');
 	vhd_footer.CurrentSize = std::byteswap(disk_size);
@@ -114,7 +121,7 @@ void VHD::ConstructHeader(UINT64 disk_size, UINT32 block_size, UINT32 sector_siz
 	memset(&vhd_dyn_header, 0, sizeof vhd_dyn_header);
 	vhd_dyn_header.Cookie = VHD_DYNAMIC_COOKIE;
 	vhd_dyn_header.DataOffset = VHD_INVALID_OFFSET;
-	vhd_dyn_header.TableOffset = std::byteswap(VHD_BLOCK_ALLOC_TABLE_LOCATION);
+	vhd_dyn_header.TableOffset = std::byteswap(VHD_BLOCK_ALLOC_TABLE_OFFSET);
 	vhd_dyn_header.HeaderVersion = VHD_DYNAMIC_VERSION;
 	vhd_dyn_header.MaxTableEntries = std::byteswap(vhd_table_entries_count);
 	vhd_dyn_header.BlockSize = std::byteswap(block_size);
@@ -125,14 +132,19 @@ void VHD::WriteHeader() const
 	if (vhd_footer.DiskType == VHDType::Fixed)
 	{
 		WriteFileWithOffset(image_file, vhd_footer, vhd_disk_size);
+#ifdef _DEBUG
+		LARGE_INTEGER fsize;
+		_ASSERT(GetFileSizeEx(image_file, &fsize));
+		_ASSERT(std::cmp_equal(fsize.QuadPart, vhd_disk_size + sizeof vhd_footer));
+#endif
 		THROW_IF_WIN32_BOOL_FALSE(FlushFileBuffers(image_file));
 		return;
 	}
 	if (vhd_footer.DiskType == VHDType::Dynamic)
 	{
-		WriteFileWithOffset(image_file, vhd_footer, VHD_HEADER_LOCATION);
-		WriteFileWithOffset(image_file, vhd_dyn_header, VHD_DYNAMIC_HEADER_LOCATION);
-		WriteFileWithOffset(image_file, vhd_block_allocation_table.get(), vhd_table_sector_aligned_count * sizeof(VHD_BAT_ENTRY), VHD_BLOCK_ALLOC_TABLE_LOCATION);
+		WriteFileWithOffset(image_file, vhd_footer, VHD_HEADER_OFFSET);
+		WriteFileWithOffset(image_file, vhd_dyn_header, VHD_DYNAMIC_HEADER_OFFSET);
+		WriteFileWithOffset(image_file, vhd_block_allocation_table.get(), vhd_table_sector_aligned_count * sizeof(VHD_BAT_ENTRY), VHD_BLOCK_ALLOC_TABLE_OFFSET);
 		WriteFileWithOffset(image_file, vhd_footer, vhd_next_free_address + require_alignment - sizeof vhd_footer);
 #ifdef _DEBUG
 		LARGE_INTEGER fsize;
@@ -180,7 +192,7 @@ std::optional<UINT64> VHD::ProbeBlock(UINT32 index) const
 	}
 	if (vhd_footer.DiskType == VHDType::Dynamic)
 	{
-		if (UINT64 block_address = vhd_block_allocation_table[index]; block_address != VHD_UNUSED_BAT_ENTRY)
+		if (const UINT64 block_address = vhd_block_allocation_table[index]; block_address != VHD_UNUSED_BAT_ENTRY)
 		{
 			return block_address * VHD_SECTOR_SIZE + vhd_bitmap_actual_size;
 		}
@@ -195,17 +207,17 @@ UINT64 VHD::AllocateBlock(UINT32 index)
 	{
 		return *offset;
 	}
-	FILE_END_OF_FILE_INFO eof_info = { {.QuadPart = static_cast<LONGLONG>(vhd_next_free_address) + vhd_bitmap_aligned_size + vhd_block_size } };
-	_ASSERT(std::cmp_greater(eof_info.EndOfFile.QuadPart, VHD_BLOCK_ALLOC_TABLE_LOCATION));
+	FILE_END_OF_FILE_INFO eof_info;
+	eof_info.EndOfFile.QuadPart = vhd_next_free_address + vhd_bitmap_aligned_size + vhd_block_size;
+	_ASSERT(std::cmp_greater(eof_info.EndOfFile.QuadPart, VHD_BLOCK_ALLOC_TABLE_OFFSET));
 	THROW_WIN32_IF(ERROR_ARITHMETIC_OVERFLOW, eof_info.EndOfFile.QuadPart > static_cast<LONGLONG>(UINT32_MAX) * VHD_SECTOR_SIZE);
 	THROW_IF_WIN32_BOOL_FALSE(SetFileInformationByHandle(image_file, FileEndOfFileInfo, &eof_info, sizeof eof_info));
 	ULONG _;
-	DUPLICATE_EXTENTS_DATA dup_extent = {
-		.FileHandle = image_file,
-		.SourceFileOffset = {.QuadPart = static_cast<LONGLONG>(vhd_template_bitmap_address) },
-		.TargetFileOffset = {.QuadPart = static_cast<LONGLONG>(vhd_next_free_address) },
-		.ByteCount = {.QuadPart = require_alignment }
-	};
+	DUPLICATE_EXTENTS_DATA dup_extent;
+	dup_extent.FileHandle = image_file;
+	dup_extent.SourceFileOffset.QuadPart = vhd_template_bitmap_address;
+	dup_extent.TargetFileOffset.QuadPart = vhd_next_free_address;
+	dup_extent.ByteCount.QuadPart = require_alignment;
 	if (vhd_template_bitmap_address == 0 || !DeviceIoControl(image_file, FSCTL_DUPLICATE_EXTENTS_TO_FILE, &dup_extent, sizeof dup_extent, nullptr, 0, &_, nullptr))
 	{
 		_ASSERT(vhd_template_bitmap_address == 0 || GetLastError() == ERROR_BLOCK_TOO_MANY_REFERENCES);
@@ -223,12 +235,12 @@ std::unique_ptr<Image> VHD::DetectImageFormatByData(HANDLE file)
 {
 	LARGE_INTEGER fsize;
 	THROW_IF_WIN32_BOOL_FALSE(GetFileSizeEx(file, &fsize));
-	if (std::cmp_less(fsize.QuadPart, VHD_BLOCK_ALLOC_TABLE_LOCATION + VHD_SECTOR_SIZE + sizeof(VHD_FOOTER)))
+	if (std::cmp_less(fsize.QuadPart, VHD_BLOCK_ALLOC_TABLE_OFFSET + VHD_STRUCTURE_ALIGNMENT + sizeof(VHD_FOOTER)))
 	{
 		return nullptr;
 	}
 	decltype(VHD_FOOTER::Cookie) vhd_cookie;
-	ReadFileWithOffset(file, &vhd_cookie, round_up(fsize.QuadPart - VHD_FOOTER_OFFSET, VHD_FOOTER_ALIGN));
+	ReadFileWithOffset(file, &vhd_cookie, round_up(fsize.QuadPart - sizeof(VHD_FOOTER), VHD_STRUCTURE_ALIGNMENT));
 	if (vhd_cookie == VHD_COOKIE)
 	{
 		return std::unique_ptr<Image>(new VHD);
@@ -238,12 +250,8 @@ std::unique_ptr<Image> VHD::DetectImageFormatByData(HANDLE file)
 UINT32 VHD::VHDChecksumUpdate(auto* header)
 {
 	header->Checksum = 0;
-	UINT32 checksum = 0;
-	for (UINT32 counter = 0; counter < sizeof(*header); counter++)
-	{
-		checksum += reinterpret_cast<PBYTE>(header)[counter];
-	}
-	return header->Checksum = std::byteswap(~checksum);
+	const BYTE* head = reinterpret_cast<BYTE*>(header);
+	return header->Checksum = std::byteswap(~std::reduce(head, &head[sizeof(*header)], 0U));
 }
 bool VHD::VHDChecksumValidate(auto* header)
 {
@@ -252,10 +260,10 @@ bool VHD::VHDChecksumValidate(auto* header)
 }
 UINT32 VHD::CHSCalculate(UINT64 disk_size)
 {
-	const int totalSectors = static_cast<int>(std::min(disk_size / VHD_SECTOR_SIZE, 65535ULL * 16 * 255));
-	int cylinderTimesHeads;
-	int heads;
-	int sectorsPerTrack;
+	const UINT32 totalSectors = static_cast<UINT32>(std::min(disk_size / VHD_SECTOR_SIZE, 65535ULL * 16 * 255));
+	UINT32 cylinderTimesHeads;
+	UINT32 heads;
+	UINT32 sectorsPerTrack;
 	if (totalSectors >= 65535 * 16 * 63)
 	{
 		sectorsPerTrack = 255;
@@ -266,7 +274,7 @@ UINT32 VHD::CHSCalculate(UINT64 disk_size)
 	{
 		sectorsPerTrack = 17;
 		cylinderTimesHeads = totalSectors / sectorsPerTrack;
-		heads = std::max((cylinderTimesHeads + 1023) / 1024, 4);
+		heads = std::max(ceil_div(cylinderTimesHeads, 1024), 4U);
 		if (cylinderTimesHeads >= heads * 1024 || heads > 16)
 		{
 			sectorsPerTrack = 31;
@@ -280,6 +288,6 @@ UINT32 VHD::CHSCalculate(UINT64 disk_size)
 			cylinderTimesHeads = totalSectors / sectorsPerTrack;
 		}
 	}
-	int cylinders = cylinderTimesHeads / heads;
+	const UINT32 cylinders = cylinderTimesHeads / heads;
 	return std::byteswap(cylinders << 16 | heads << 8 | sectorsPerTrack);
 }

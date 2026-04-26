@@ -46,27 +46,26 @@ public:
 	static std::unique_ptr<Image> DetectImageFormatByData(HANDLE file) = delete;
 };
 
-[[nodiscard]]
-constexpr auto round_up(auto value, auto base_multiple)
+constexpr UINT32 ceil_div(auto value, auto divisor)
 {
-	return (value + base_multiple - 1) / base_multiple * base_multiple;
-}
-static_assert(round_up(1024 * 8 + 1, 1024) == 1024 * 9);
-
-[[nodiscard]]
-constexpr auto ceil_div(auto value, auto divisor)
-{
-	return static_cast<UINT32>((value + divisor - 1) / divisor);
+	return static_cast<UINT32>(value / divisor + (value % divisor != 0));
 }
 static_assert(ceil_div(1024 * 8 + 1, 1024) == 9);
 
+constexpr auto round_up(auto value, auto base_multiple)
+{
+	return ceil_div(value, base_multiple) * base_multiple;
+}
+static_assert(round_up(1024 * 8 + 1, 1024) == 1024 * 9);
+
 void inline ReadFileWithOffset(HANDLE hFile, PVOID lpBuffer, ULONG nNumberOfBytesToRead, ULONGLONG Offset)
 {
-	OVERLAPPED o = {
-		.Offset = static_cast<ULONG>(Offset & ~0U),
-		.OffsetHigh = static_cast<ULONG>(Offset >> 32),
-	};
-	THROW_IF_WIN32_BOOL_FALSE(ReadFile(hFile, lpBuffer, nNumberOfBytesToRead, nullptr, &o));
+	OVERLAPPED o = {};
+	o.Offset = static_cast<ULONG>(Offset & ~0U);
+	o.OffsetHigh = static_cast<ULONG>(Offset >> 32);
+	ULONG read;
+	THROW_IF_WIN32_BOOL_FALSE(ReadFile(hFile, lpBuffer, nNumberOfBytesToRead, &read, &o));
+	THROW_LAST_ERROR_IF(nNumberOfBytesToRead != read);
 }
 template <typename Ty>
 void inline ReadFileWithOffset(HANDLE hFile, Ty* lpBuffer, ULONGLONG Offset)
@@ -77,11 +76,12 @@ void inline ReadFileWithOffset(HANDLE hFile, Ty* lpBuffer, ULONGLONG Offset)
 
 void inline WriteFileWithOffset(HANDLE hFile, LPCVOID lpBuffer, ULONG nNumberOfBytesToWrite, ULONGLONG Offset)
 {
-	OVERLAPPED o = {
-		.Offset = static_cast<ULONG>(Offset & ~0U),
-		.OffsetHigh = static_cast<ULONG>(Offset >> 32),
-	};
-	THROW_IF_WIN32_BOOL_FALSE(WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, nullptr, &o));
+	OVERLAPPED o = {};
+	o.Offset = static_cast<ULONG>(Offset & ~0U);
+	o.OffsetHigh = static_cast<ULONG>(Offset >> 32);
+	ULONG wrote;
+	THROW_IF_WIN32_BOOL_FALSE(WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, &wrote, &o));
+	THROW_LAST_ERROR_IF(nNumberOfBytesToWrite != wrote);
 }
 template <typename Ty>
 void inline WriteFileWithOffset(HANDLE hFile, const Ty& lpBuffer, ULONGLONG Offset)
