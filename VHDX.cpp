@@ -16,7 +16,6 @@ void VHDX::ReadHeader()
 {
 	ReadFileWithOffset(image_file, &vhdx_file_indentifier, VHDX_FILE_IDENTIFIER_OFFSET);
 	THROW_WIN32_IF(ERROR_VHD_DRIVE_FOOTER_MISSING, vhdx_file_indentifier.Signature != VHDX_SIGNATURE);
-	CreateFileMappingFromApp(image_file, nullptr, PAGE_READONLY, 0, nullptr);
 	const auto vhdx_headers = std::make_unique_for_overwrite<VHDX_HEADER[]>(2);
 	ReadFileWithOffset(image_file, &vhdx_headers[0], VHDX_HEADER1_OFFSET);
 	ReadFileWithOffset(image_file, &vhdx_headers[1], VHDX_HEADER2_OFFSET);
